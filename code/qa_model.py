@@ -30,7 +30,7 @@ from tensorflow.python.ops import embedding_ops
 from evaluate import exact_match_score, f1_score
 from data_batcher import get_batch_generator
 from pretty_print import print_example
-from modules import RNNEncoder, SimpleSoftmaxLayer, BasicAttn
+from modules import RNNEncoder, SimpleSoftmaxLayer, BasicAttn, BiDirectionalAttn, BiRNN, BiRNN2
 
 logging.basicConfig(level=logging.INFO)
 
@@ -126,25 +126,53 @@ class QAModel(object):
           self.probdist_start, self.probdist_end: Both shape (batch_size, context_len). Each row sums to 1.
             These are the result of taking (masked) softmax of logits_start and logits_end.
         """
+        print "Running %s Attention Model" % self.FLAGS.attention
 
-        # Use a RNN to get hidden states for the context and the question
-        # Note: here the RNNEncoder is shared (i.e. the weights are the same)
-        # between the context and the question.
-        encoder = RNNEncoder(self.FLAGS.hidden_size, self.keep_prob)
-        context_hiddens = encoder.build_graph(self.context_embs, self.context_mask) # (batch_size, context_len, hidden_size*2)
-        question_hiddens = encoder.build_graph(self.qn_embs, self.qn_mask) # (batch_size, question_len, hidden_size*2)
+        if self.FLAGS.attention == "BiDAF":
+            # Use a RNN to get hidden states for the context and the question
+            # Note: here the RNNEncoder is shared (i.e. the weights are the same)
+            # between the context and the question.
+            encoder = RNNEncoder(self.FLAGS.hidden_size, self.keep_prob)
+            context_hiddens = encoder.build_graph(self.context_embs, self.context_mask) # (batch_size, context_len, hidden_size*2)
+            question_hiddens = encoder.build_graph(self.qn_embs, self.qn_mask) # (batch_size, question_len, hidden_size*2)
 
-        # Use context hidden states to attend to question hidden states
-        attn_layer = BasicAttn(self.keep_prob, self.FLAGS.hidden_size*2, self.FLAGS.hidden_size*2)
-        _, attn_output = attn_layer.build_graph(question_hiddens, self.qn_mask, context_hiddens) # attn_output is shape (batch_size, context_len, hidden_size*2)
+            bidaf_attn_layer = BiDirectionalAttn(self.keep_prob, self.FLAGS.hidden_size*2, self.FLAGS.hidden_size*2, self.FLAGS.question_len, self.FLAGS.context_len)
+            context_to_question, question_to_context = bidaf_attn_layer.build_graph(question_hiddens, self.qn_mask, context_hiddens, self.context_mask)
 
-        # Concat attn_output to context_hiddens to get blended_reps
-        blended_reps = tf.concat([context_hiddens, attn_output], axis=2) # (batch_size, context_len, hidden_size*4)
+            # Multiple and combine attention c2q and q2c vectors and hidden context vector
+            q2c_context = tf.multiply(context_hiddens, question_to_context)
+            c2q_context = tf.multiply(context_hiddens, context_to_question)
+            blended_reps = tf.concat([context_hiddens, context_to_question, c2q_context, q2c_context], axis=2) # (batch_size, context_len, hidden_size*8)
 
-        # Apply fully connected layer to each blended representation
-        # Note, blended_reps_final corresponds to b' in the handout
-        # Note, tf.contrib.layers.fully_connected applies a ReLU non-linarity here by default
-        blended_reps_final = tf.contrib.layers.fully_connected(blended_reps, num_outputs=self.FLAGS.hidden_size) # blended_reps_final is shape (batch_size, context_len, hidden_size)
+            # We include 2 layers of bidirectional LSTM as modeling layers to
+            # encode query-aware representations of context words.
+            modeling_layer = BiRNN(self.FLAGS.hidden_size, self.keep_prob)
+            blended_reps_1 = modeling_layer.build_graph(blended_reps, self.context_mask) # (batch_size, context_len, hidden_size*2).
+            
+            modeling_layer_2 = BiRNN2(self.FLAGS.hidden_size, self.keep_prob)
+            blended_reps_final = modeling_layer_2.build_graph(blended_reps_1, self.context_mask) # (batch_size, context_len, hidden_size*2).
+        
+        else:
+            # Default baseline: self.FLAGS.attention == "BasicAttn"
+        
+            # Use a RNN to get hidden states for the context and the question
+            # Note: here the RNNEncoder is shared (i.e. the weights are the same)
+            # between the context and the question.
+            encoder = RNNEncoder(self.FLAGS.hidden_size, self.keep_prob)
+            context_hiddens = encoder.build_graph(self.context_embs, self.context_mask) # (batch_size, context_len, hidden_size*2)
+            question_hiddens = encoder.build_graph(self.qn_embs, self.qn_mask) # (batch_size, question_len, hidden_size*2)
+
+            # Use context hidden states to attend to question hidden states
+            attn_layer = BasicAttn(self.keep_prob, self.FLAGS.hidden_size*2, self.FLAGS.hidden_size*2)
+            _, attn_output = attn_layer.build_graph(question_hiddens, self.qn_mask, context_hiddens) # attn_output is shape (batch_size, context_len, hidden_size*2)
+
+            # Concat attn_output to context_hiddens to get blended_reps
+            blended_reps = tf.concat([context_hiddens, attn_output], axis=2) # (batch_size, context_len, hidden_size*4)
+
+            # Apply fully connected layer to each blended representation
+            # Note, blended_reps_final corresponds to b' in the handout
+            # Note, tf.contrib.layers.fully_connected applies a ReLU non-linarity here by default
+            blended_reps_final = tf.contrib.layers.fully_connected(blended_reps, num_outputs=self.FLAGS.hidden_size) # blended_reps_final is shape (batch_size, context_len, hidden_size)
 
         # Use softmax layer to compute probability distribution for start location
         # Note this produces self.logits_start and self.probdist_start, both of which have shape (batch_size, context_len)
