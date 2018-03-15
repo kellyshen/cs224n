@@ -347,7 +347,7 @@ class BiRNN2(object):
     Note that this is the exact same code as class BiRNN.
     We use this second class instead of two instances of BiRNN to 
     separate variable scope.
-    
+
     Feeds input through a RNN and returns all the hidden states.
 
     This code uses a bidirectional LSTM.
@@ -381,7 +381,7 @@ class BiRNN2(object):
             out: Tensor shape (batch_size, seq_len, hidden_size*2).
             This is all hidden states (fw and bw hidden states are concatenated).
         """
-        with vs.variable_scope("BiRNN"):
+        with vs.variable_scope("BiRNN2"):
             input_lens = tf.reduce_sum(masks, reduction_indices=1) # shape (batch_size)
 
             # (fw_out, bw_out) are  hidden states for every timestep.
