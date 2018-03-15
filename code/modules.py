@@ -176,6 +176,116 @@ class BasicAttn(object):
             return attn_dist, output
 
 
+class BiDirectionalAttn(object):
+    """Module for BiDirectional Attention.
+
+    Note: in this module we use the terminology of "keys" and "values" (see lectures).
+    In the terminology of "X attends to Y", "keys attend to values".
+
+    In the baseline model, the keys are the context hidden states
+    and the values are the question hidden states.
+
+    We choose to use general terminology of keys and values in this module
+    (rather than context and question) to avoid confusion if you reuse this
+    module with other inputs.
+    """
+    def __init__(self, keep_prob, key_vec_size, value_vec_size, num_values, num_keys):
+        """
+        Inputs:
+          keep_prob: tensor containing a single scalar that is the keep probability (for dropout)
+          key_vec_size: size of the key vectors. int
+          value_vec_size: size of the value vectors. int
+        """
+        self.keep_prob = keep_prob
+        ### In BiDAF, value_vec_size = key_vec_size or this won't work according to Piazza
+        tf.assert_equal(key_vec_size, value_vec_size)
+        self.key_vec_size = key_vec_size
+        self.value_vec_size = value_vec_size
+        self.num_values = num_values
+        self.num_keys = num_keys
+
+    def build_graph(self, values, values_mask, keys, keys_mask):
+        """
+        Keys attend to values.
+        For each key, return an attention distribution and an attention output vector.
+        Inputs:
+          values: Tensor shape (batch_size, num_values, value_vec_size).
+          values_mask: Tensor shape (batch_size, num_values).
+            1s where there's real input, 0s where there's padding
+          keys: Tensor shape (batch_size, num_keys, key_vec_size)
+          keys_mask: Tensor shape (batch_size, num_keys).
+            1s where there's real input, 0s where there's padding
+        Outputs:
+          keys_to_values: Tensor shape (batch_size, num_keys, num_values).
+            For each key, the distribution should sum to 1,
+            and should be 0 in the value locations that correspond to padding.
+          values_to_keys: Tensor shape (batch_size, num_keys, hidden_size).
+            This is the attention output; the weighted sum of the values
+            (using the attention distribution as weights).
+        """
+        with vs.variable_scope("BiDirectionalAttn"):
+            ### In BiDAF, value_vec_size = key_vec_size or this won't work according to Piazza
+            value_vec_size = self.value_vec_size
+
+            W_c = tf.get_variable("W_c", shape = [value_vec_size, 1],
+                initializer = tf.contrib.layers.xavier_initializer()) # Test: different seeds
+            
+            W_q = tf.get_variable("W_q", shape=[value_vec_size, 1],
+                initializer=tf.contrib.layers.xavier_initializer()) # Test: different seeds
+            
+            W_cq = tf.get_variable("W_cq", shape=[value_vec_size, 1],
+                initializer=tf.contrib.layers.xavier_initializer()) # Test: different seeds
+            
+
+            ### Derive Similarity matrix S
+            # Value matrix C
+            c_ = tf.reshape(values, [-1, value_vec_size])               # (batch_size * num_values, vec_size)
+            C = tf.matmul(c_, W_c)                                      # (batch_size * num_values, 1)
+            C = tf.reshape(C, [-1, self.num_values])                    # (batch_size, num_values)
+            C = tf.expand_dims(C, 1)                                    # (batch_size, 1, num_values)
+
+            # Key matrix Q
+            q_ = tf.reshape(keys, [-1, value_vec_size])                 # (batch_size * num_keys, vec_size)
+            Q = tf.matmul(q_, W_q)                                      # (batch_size * num_keys, 1)
+            Q = tf.reshape(Q, [-1, self.num_keys])                      # (batch_size, num_keys)
+            Q = tf.expand_dims(Q, 2)                                    # (batch_size, num_keys, 1)
+
+            # Key-value matrix CQ
+            c_t = tf.transpose(c_, perm = [1, 0])                         # (vec_size, batch_size * num_values)
+            wc_ = tf.multiply(c_t, W_cq)                                # (vec_size, batch_size * num_values)
+            wc_ = tf.reshape(wc_, [-1, value_vec_size, self.num_values])# (batch_size, vec_size, num_values)
+            CQ = tf.matmul(keys, wc_)                                   # (batch_size, num_keys, num_values)
+
+            # Build similarity matrix S
+            S = C + Q + CQ                                              # (batch_size, num_keys, num_values)
+
+            ### Key-to-Value: Context-to-Question Attention (C2Q)
+            # Apply softmax to get attention distribution over previous hidden states
+            values_attn_logits_mask = tf.expand_dims(values_mask, 1)                        # (batch_size, 1, num_values)
+            _, values_attn_dist = masked_softmax(S, values_attn_logits_mask, 2)             # (batch_size, num_keys, num_values)
+
+            # Use attention distribution to take weighted sum of values
+            # and apply dropout/keep_prob
+            keys_to_values = tf.matmul(values_attn_dist, values)                            # (batch_size, num_keys, vec_size)
+            keys_to_values = tf.nn.dropout(keys_to_values, self.keep_prob)                  # (batch_size, num_keys, vec_size)
+
+
+            ### Value-to-Key: Question-to-Context Attention (Q2C)
+            # Take max of the corresponding row of the similarity matrix
+            m = tf.reduce_max(S, axis = 2, keep_dims = True)                                    # (batch_size, num_keys, 1)
+
+            # Apply softmax to get attention distribution over previous hidden states
+            keys_attn_logits_mask = tf.expand_dims(keys_mask, 1)                            # (batch_size, 1, num_keys)
+            _, keys_attn_dist = masked_softmax(m, keys_attn_logits_mask, 2)                 # (batch_size, num_keys, 1)
+
+            # Use attention distribution to take weighted sum of keys
+            # and apply dropout/keep_prob
+            values_to_keys = tf.matmul(keys_attn_dist, keys)                                # (batch_size, num_keys, vec_size)
+            values_to_keys = tf.nn.dropout(values_to_keys, self.keep_prob)                  # (batch_size, num_keys, vec_size)
+
+            return keys_to_values, values_to_keys
+
+
 def masked_softmax(logits, mask, dim):
     """
     Takes masked softmax over given dimension of logits.
