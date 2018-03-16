@@ -30,7 +30,7 @@ from tensorflow.python.ops import embedding_ops
 from evaluate import exact_match_score, f1_score
 from data_batcher import get_batch_generator
 from pretty_print import print_example
-from modules import RNNEncoder, SimpleSoftmaxLayer, BasicAttn, BiDirectionalAttn, BiRNN, BiRNN2
+from modules import RNNEncoder, SimpleSoftmaxLayer, BasicAttn, BiDirectionalAttn, SelfAttn, BiRNN, BiRNN2
 
 logging.basicConfig(level=logging.INFO)
 
@@ -152,6 +152,42 @@ class QAModel(object):
             modeling_layer_2 = BiRNN2(self.FLAGS.hidden_size, self.keep_prob)
             blended_reps_final = modeling_layer_2.build_graph(blended_reps_1, self.context_mask) # (batch_size, context_len, hidden_size*2).
         
+
+        elif self.FLAGS.attention == "SelfAttn":
+            # Section numbers from R-Net paper
+            
+            # 3.1: Question and Passage Encoder: Use RNN to get hidden states 
+            # for the context and the question
+            encoder = RNNEncoder(self.FLAGS.hidden_size, self.keep_prob)
+            context_hiddens = encoder.build_graph(self.context_embs, self.context_mask) # (batch_size, context_len, hidden_size*2)
+            question_hiddens = encoder.build_graph(self.qn_embs, self.qn_mask) # (batch_size, question_len, hidden_size*2)
+
+            # 3.2: Gated Attention-Based Recurrent Networks (C2Q): Paper proposes
+            # gated attention-based recurrent network to incorporate question
+            # information into passage representation.
+            basic_attn_layer = BasicAttn(self.keep_prob, self.FLAGS.hidden_size*2, self.FLAGS.hidden_size*2)
+            _, basic_attn_output = basic_attn_layer.build_graph(question_hiddens, self.qn_mask, context_hiddens) # (batch_size, context_len, hidden_size*2)
+            # basic_blended_reps is basic_attn_output concatted to context_hiddens
+            basic_blended_reps = tf.concat([context_hiddens, basic_attn_output], axis=2) # (batch_size, context_len, hidden_size*4)
+
+            # 3.3: Self-Matching Attention: Directly match the question-aware passage
+            # representation against itself
+            self_attn_layer = SelfAttn(self.keep_prob, self.FLAGS.hidden_size*4, self.FLAGS.context_len, self.FLAGS.self_attn_dim)
+            self_attn_output = self_attn_layer.build_graph(basic_blended_reps, self.context_mask) # (batch_size, context_len, hidden_size*4)
+            # self_blended_reps is blended_reps_ concatted to self_attn_output
+            self_blended_reps = tf.concat([basic_blended_reps, self_attn_output], axis=2) # (batch_size, context_len, hidden_size*8)
+            # Encode current passage and question information
+            encoder_ = BiRNN(self.FLAGS.hidden_size, self.keep_prob)            
+            blended_reps = encoder_.build_graph(self_blended_reps, self.context_mask) 
+
+            # Apply fully connected layer to each blended representation
+            # Note, blended_reps_final corresponds to b' in the handout
+            # Note, tf.contrib.layers.fully_connected applies a ReLU non-linarity here by default
+            blended_reps_final = tf.contrib.layers.fully_connected(
+                blended_reps,
+                num_outputs=self.FLAGS.hidden_size) # blended_reps_final has shape (batch_size, context_len, hidden_size)
+        
+
         else:
             # Default baseline: self.FLAGS.attention == "BasicAttn"
         

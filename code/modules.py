@@ -177,7 +177,8 @@ class BasicAttn(object):
 
 
 class BiDirectionalAttn(object):
-    """Module for BiDirectional Attention. (Refer to BiDAF in 5.1.1)
+    """
+    Module for BiDirectional Attention. (Refer to BiDAF in 5.1.1)
 
     Note: in this module we use the terminology of "keys" and "values" (see lectures).
     In the terminology of "X attends to Y", "keys attend to values".
@@ -284,6 +285,93 @@ class BiDirectionalAttn(object):
             values_to_keys = tf.nn.dropout(values_to_keys, self.keep_prob)                  # (batch_size, num_keys, vec_size)
 
             return keys_to_values, values_to_keys
+
+
+class SelfAttn(object):
+    """
+    Module for Self (Matching) Attention Layer. (Refer to SelfAttn/R-Net in 5.1.3)
+
+    Note: in this module we use the terminology of "keys" and "values" (see lectures).
+    In the terminology of "X attends to Y", "keys attend to values".
+    In the baseline model, the keys are the context hidden states
+    and the values are the blended question-passage hidden states.
+    """
+    def __init__(self, keep_prob, value_vec_size, num_keys, weight_dim):
+        """
+        Inputs:
+            keep_prob: tensor containing a single scalar that is the keep probability (for dropout)
+            value_vec_size: size of the value vectors. int
+            num_keys: number of keys. int
+        """
+        self.keep_prob = keep_prob
+        self.value_vec_size = value_vec_size
+        self.num_keys = num_keys
+        self.weight_dim = weight_dim
+
+    def build_graph(self, values, keys_mask):
+        """
+        Inputs:
+            values: Tensor shape (batch_size, num_keys, value_vec_size)
+                blended representations of questions and contexts
+            keys_mask: Tensor shape (batch_size, num_keys).
+                1s where there's real input, 0s where there's padding
+        Outputs:
+          attn_dist: Tensor shape (batch_size, num_keys, num_keys).
+            For each key, the distribution should sum to 1,
+            and should be 0 in the value locations that correspond to padding.
+          output: Tensor shape (batch_size, num_keys, value_vec_size).
+            This is the attention output; the weighted sum of the values
+            (using the attention distribution as weights).
+        """
+        with vs.variable_scope("SelfAttn"):
+            W_1 = tf.get_variable(
+                'W_1',
+                shape=[self.value_vec_size, self.weight_dim],
+                initializer=tf.contrib.layers.xavier_initializer())       
+            W_2 = tf.get_variable(
+                'W_2',
+                shape=[self.value_vec_size, self.weight_dim],
+                initializer=tf.contrib.layers.xavier_initializer())
+            V = tf.get_variable(                                    
+                'V',
+                shape=[self.weight_dim, ],
+                initializer=tf.contrib.layers.xavier_initializer())
+
+            values_t = tf.transpose(values,[0, 2, 1]) # (batch_size, value_vec_size, num_keys)
+            # print("values_t: ", values_t.get_shape().as_list())
+
+            h1 = tf.einsum('kj,ikl->ijl', W_1, values_t) # (batch_size, weight_dim, num_keys)
+            # print("h1: ", h1.get_shape().as_list())
+            h1 = tf.expand_dims(h1, 2) # (batch_size, weight_dim, 1, num_keys)
+            # print("h1 (post expand_dims(h1, 2): ", h1.get_shape().as_list())
+
+            h2 = tf.einsum('kj,ikl->ijl', W_2, values_t) # (batch_size, weight_dim, num_keys)
+            # print("h2: ", h2.get_shape().as_list())
+            h2 = tf.expand_dims(h2, 3) # (batch_size, weight_dim, num_keys, 1)
+            # print("h2 (post expand_dims(h2, 3): ", h2.get_shape().as_list())
+
+            # Get the attention scores (logits) e
+            z = tf.tanh(tf.reshape( # (batch_size, weight_dim, num_keys * num_keys)
+                tf.add(h1, h2),                      
+                [-1, self.weight_dim, self.num_keys * self.num_keys]))
+            # print("z: ", z.get_shape().as_list())
+            e = tf.reshape( # (batch_size, num_keys, num_keys)
+                tf.einsum('k,ikj->ij', V, z),
+                [-1, self.num_keys, self.num_keys])
+            # print("e: ", e.get_shape().as_list())
+
+            # Apply softmax to get attention distribution over previous hidden states
+            attn_logits_mask = tf.expand_dims(keys_mask, 1)             # (batch_size, 1, num_keys)
+            _, attn_dist = masked_softmax(e, attn_logits_mask, 2)       # (batch_size, num_keys, num_keys). take softmax over keys
+
+            # Use attention distribution to take weighted sum of values
+            output = tf.matmul(attn_dist, values)                       # (batch_size, num_keys, value_vec_size)
+
+            # Apply dropout
+            output = tf.nn.dropout(output, self.keep_prob)              # (batch_size, num_keys, value_vec_size)
+            # print("output: ", output.get_shape().as_list())
+
+            return output
 
 
 class BiRNN(object):
