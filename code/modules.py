@@ -33,7 +33,9 @@ class RNNEncoder(object):
     still applies because we're getting a different "encoding" of each
     position in the sequence, and we'll use the encodings downstream in the model.
 
-    This code uses a bidirectional GRU, but you could experiment with other types of RNN.
+    This code originally used a bidirectional GRU, but 
+    we find that LSTMs give marginally better results long-term while being 
+    more computationally expensive.
     """
 
     def __init__(self, hidden_size, keep_prob):
@@ -470,6 +472,67 @@ class BiRNN2(object):
             This is all hidden states (fw and bw hidden states are concatenated).
         """
         with vs.variable_scope("BiRNN2"):
+            input_lens = tf.reduce_sum(masks, reduction_indices=1) # shape (batch_size)
+
+            # (fw_out, bw_out) are  hidden states for every timestep.
+            # Shape for fw_out and bw_out are (batch_size, seq_len, hidden_size).
+            (fw_out, bw_out), _ = tf.nn.bidirectional_dynamic_rnn(
+                self.rnn_cell_fw,
+                self.rnn_cell_bw,
+                inputs,
+                input_lens,
+                dtype=tf.float32)
+
+            # Concatenate forward and backward hidden states
+            out = tf.concat([fw_out, bw_out], 2)
+
+            # Apply dropout/keep_prob
+            out = tf.nn.dropout(out, self.keep_prob)
+
+            return out
+
+
+class BiRNN3(object):
+    """
+    Note that this is the exact same code as class BiRNN.
+    We use this third class instead of three instances of BiRNN to 
+    separate variable scope.
+
+    Feeds input through a RNN and returns all the hidden states.
+
+    This code uses a bidirectional LSTM, though we are considering
+    using GRUCells for better performance.
+    """
+    def __init__(self, hidden_size, keep_prob):
+        """
+        Inputs:
+          hidden_size: int. Hidden size of the RNN
+          keep_prob: Tensor containing a single scalar that is the keep probability (for dropout)
+        """
+        self.hidden_size = hidden_size
+        self.keep_prob = keep_prob
+
+        # Forward
+        self.rnn_cell_fw = rnn_cell.LSTMCell(self.hidden_size)
+        self.rnn_cell_fw = DropoutWrapper(self.rnn_cell_fw, input_keep_prob=self.keep_prob)
+        
+        # Backward
+        self.rnn_cell_bw = rnn_cell.LSTMCell(self.hidden_size)
+        self.rnn_cell_bw = DropoutWrapper(self.rnn_cell_bw, input_keep_prob=self.keep_prob)
+
+    def build_graph(self, inputs, masks):
+        """
+        Inputs:
+          inputs: Tensor shape (batch_size, seq_len, input_size)
+          masks: Tensor shape (batch_size, seq_len).
+            Has 1s where there is real input, 0s where there's padding.
+            This is used to make sure tf.nn.bidirectional_dynamic_rnn doesn't iterate through masked steps.
+        
+        Returns:
+            out: Tensor shape (batch_size, seq_len, hidden_size*2).
+            This is all hidden states (fw and bw hidden states are concatenated).
+        """
+        with vs.variable_scope("BiRNN3"):
             input_lens = tf.reduce_sum(masks, reduction_indices=1) # shape (batch_size)
 
             # (fw_out, bw_out) are  hidden states for every timestep.
