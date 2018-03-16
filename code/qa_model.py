@@ -189,8 +189,8 @@ class QAModel(object):
             # self_blended_reps is blended_reps_ concatted to self_attn_output
             self_blended_reps = tf.concat([basic_blended_reps, self_attn_output], axis=2) # (batch_size, context_len, hidden_size*8)
             # Encode current passage and question information
-            encoder_ = BiRNN(self.FLAGS.hidden_size, self.keep_prob)            
-            blended_reps = encoder_.build_graph(self_blended_reps, self.context_mask) 
+            encoder = BiRNN(self.FLAGS.hidden_size, self.keep_prob)            
+            blended_reps = encoder.build_graph(self_blended_reps, self.context_mask) 
 
             # Apply fully-connected layer to each blended representation. blended_reps_final
             # corresponds to b' (see handout), and tf.contrib.layers.fully_connected applies
@@ -262,9 +262,10 @@ class QAModel(object):
             selfattn_blended_reps_final = tf.concat([basic_blended_reps, selfattn_output], axis=2) # (batch_size, context_len, hidden_size*8)
 
 
-            # ALTERNATIVE: RUN SELFATTN_BLENDED_REPS_FINAL THROUGH BIRNN3 AND BUILDING GRAPH BEFORE STACKING MODELS TOGETHER?
+            # ALTERNATIVE: RUN SELFATTN_BLENDED_REPS_FINAL THROUGH BIRNN3 AS ENCODER
+            # AND BUILDING GRAPH BEFORE STACKING MODELS TOGETHER?
             # OR DO BOTH?
-            
+
             # Stack models together, before encoding current passage and question information
             stacked_blended_reps = tf.concat([bidaf_blended_reps_final, selfattn_blended_reps_final], axis=2) # (batch_size, context_len, hidden_size*3)
             stacked_encoder = BiRNN3(self.FLAGS.hidden_size, self.keep_prob)
