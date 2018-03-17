@@ -810,6 +810,7 @@ class QAModel(object):
         """
         # Get start_dist and end_dist, both shape (batch_size, context_len)
         start_dist, end_dist = self.get_prob_dists(session, batch)
+        x, y = start_dist.shape
 
         # Take argmax to get start_pos and end_post, both shape (batch_size)
         #start_pos = np.argmax(start_dist, axis=1)
@@ -818,14 +819,16 @@ class QAModel(object):
         probs_all = [] # 16 x B
         starts_all = []
         for i in range(16):
-            end_array = np.concatenate((np.zeros((i,self.FLAGS.batch_size)), np.array(end_dist.T[:self.FLAGS.context_len - i])), 0).T
+            #print 'first size ', np.zeros((i,x)).shape
+            #print 'second size ', np.array(end_dist.T[:y - i])
+            end_array = np.concatenate((np.zeros((i,x)), np.array(end_dist.T[:y - i])), 0).T
             probs = np.multiply(np.array(start_dist), np.array(end_array)) # B x 16
             starts = np.argmax(probs, axis=1) # B, 
             probs_max = np.max(probs, axis=1) 
             starts_all.append(starts) 
             probs_all.append(probs_max) 
         max_dists = np.argmax(np.array(probs_all), axis=0) # B, 
-        start_pos = np.array(starts_all).T[[i for i in range(self.FLAGS.batch_size)], max_dists] # B
+        start_pos = np.array(starts_all).T[[i for i in range(x)], max_dists] # B
         end_pos = start_pos + max_dists
         return start_pos, end_pos
 
