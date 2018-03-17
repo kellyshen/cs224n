@@ -52,7 +52,7 @@ tf.app.flags.DEFINE_integer("hidden_size", 100, "Size of the hidden states")
 tf.app.flags.DEFINE_integer("context_len", 400, "The maximum context length of your model")
 tf.app.flags.DEFINE_integer("question_len", 30, "The maximum question length of your model")
 tf.app.flags.DEFINE_integer("embedding_size", 100, "Size of the pretrained word vectors. This needs to be one of the available GloVe dimensions: 50/100/200/300")
-tf.app.flags.DEFINE_integer("self_attn_dim", 1, "Matrices dimensions used in Self-Matching Attention")
+tf.app.flags.DEFINE_integer("self_attn_dim", 2, "Matrices dimensions used in Self-Matching Attention")
 
 # How often to print, save, eval
 tf.app.flags.DEFINE_integer("print_every", 1, "How many iterations to do per print.")
@@ -69,7 +69,7 @@ tf.app.flags.DEFINE_string("json_in_path", "", "For official_eval mode, path to 
 tf.app.flags.DEFINE_string("json_out_path", "predictions.json", "Output path for official_eval mode. Defaults to predictions.json")
 
 # Attention flag to use
-tf.app.flags.DEFINE_string("attention", "BiDAFSelfAttn_k", "Type of attention to be used. Options: BasicAttn, BiDAF, SelfAttn, Rnet, BiDAFSelfAttn, BiDAFSelfAttn_k, BiDAFRnet.")
+tf.app.flags.DEFINE_string("attention", "BiDAFRnet_k0", "Type of attention to be used. Options: BasicAttn, BiDAF, SelfAttn, Rnet, BiDAFSelfAttn, BiDAFSelfAttn_k, BiDAFRnet.")
 
 FLAGS = tf.app.flags.FLAGS
 os.environ["CUDA_VISIBLE_DEVICES"] = str(FLAGS.gpu)

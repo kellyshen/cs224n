@@ -30,7 +30,7 @@ from tensorflow.python.ops import embedding_ops
 from evaluate import exact_match_score, f1_score
 from data_batcher import get_batch_generator
 from pretty_print import print_example
-from modules import RNNEncoder, SimpleSoftmaxLayer, BasicAttn, BiDirectionalAttn, SelfAttn, BiRNN, BiRNN2, BiRNN3, RNN, FullySum
+from modules import RNNEncoder, RNNEncoder2, SimpleSoftmaxLayer, BasicAttn, BiDirectionalAttn, SelfAttn, BiRNN, BiRNN2, BiRNN3, RNN, FullySum
 
 logging.basicConfig(level=logging.INFO)
 
@@ -526,6 +526,10 @@ class QAModel(object):
             context_hiddens = encoder.build_graph(self.context_embs, self.context_mask) # (batch_size, context_len, hidden_size*2)
             question_hiddens = encoder.build_graph(self.qn_embs, self.qn_mask) # (batch_size, question_len, hidden_size*2)
 
+            encoder2 = RNNEncoder2(self.FLAGS.hidden_size, self.keep_prob)
+            context_hiddens = encoder2.build_graph(context_hiddens, self.context_mask) # (batch_size, context_len, hidden_size*2)
+            question_hiddens = encoder2.build_graph(question_hiddens, self.qn_mask) # (batch_size, question_len, hidden_size*2)
+
             # (No R-Net Paper section Number)
             # Begin BiDAF Component
 
@@ -564,8 +568,8 @@ class QAModel(object):
 
             # 3.3: Self-Matching Attention: Directly match the question-aware passage
             # representation against itself
-            selfattn_layer = SelfAttn(self.keep_prob, self.FLAGS.hidden_size*4, self.FLAGS.context_len, self.FLAGS.self_attn_dim)
-            _, selfattn_output = selfattn_layer.build_graph(bidaf_blended_reps, self.context_mask) # (batch_size, context_len, hidden_size*4)
+            selfattn_layer = SelfAttn(self.keep_prob, self.FLAGS.hidden_size*8, self.FLAGS.context_len, self.FLAGS.self_attn_dim)
+            self_attn_dist, selfattn_output = selfattn_layer.build_graph(bidaf_blended_reps, self.context_mask) # (batch_size, context_len, hidden_size*8)
             # self_blended_reps is blended_reps_ concatted to self_attn_output
             selfattn_blended_reps_final = tf.concat([bidaf_blended_reps, selfattn_output], axis=2) # (batch_size, context_len, hidden_size*8)
 
@@ -808,8 +812,18 @@ class QAModel(object):
         start_dist, end_dist = self.get_prob_dists(session, batch)
 
         # Take argmax to get start_pos and end_post, both shape (batch_size)
-        start_pos = np.argmax(start_dist, axis=1)
-        end_pos = np.argmax(end_dist, axis=1)
+        #start_pos = np.argmax(start_dist, axis=1)
+        #end_pos = np.argmax(end_dist, axis=1)
+
+        candidates = []
+        for i in range(15):
+            end_array = np.concatenate((np.zeros((i,self.batch_size)), end.T[:self.contex_len - i]), 0).T
+            probs = tf.multiply(start_pos, end_array)
+            start = np.argmax(probs, axis=1)
+            candidates = [probs[start], start, start+i]
+        best = max(candidates, key=lambda x:x[0])
+        best_score, start_pos, end_pos = best
+
 
         return start_pos, end_pos
 
