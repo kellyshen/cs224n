@@ -57,7 +57,7 @@ tf.app.flags.DEFINE_integer("self_attn_dim", 1, "Matrices dimensions used in Sel
 # How often to print, save, eval
 tf.app.flags.DEFINE_integer("print_every", 1, "How many iterations to do per print.")
 tf.app.flags.DEFINE_integer("save_every", 500, "How many iterations to do per save.")
-tf.app.flags.DEFINE_integer("eval_every", 500, "How many iterations to do per calculating loss/f1/em on dev set. Warning: this is fairly time-consuming so don't do it too often.")
+tf.app.flags.DEFINE_integer("eval_every", 1, "How many iterations to do per calculating loss/f1/em on dev set. Warning: this is fairly time-consuming so don't do it too often.")
 tf.app.flags.DEFINE_integer("keep", 1, "How many checkpoints to keep. 0 indicates keep all (you shouldn't need to do keep all though - it's very storage intensive).")
 
 # Reading and saving data
@@ -69,7 +69,7 @@ tf.app.flags.DEFINE_string("json_in_path", "", "For official_eval mode, path to 
 tf.app.flags.DEFINE_string("json_out_path", "predictions.json", "Output path for official_eval mode. Defaults to predictions.json")
 
 # Attention flag to use
-tf.app.flags.DEFINE_string("attention", "BiDAFSelfAttn_k0", "Type of attention to be used. Options: BasicAttn, BiDAF, SelfAttn, Rnet, BiDAFSelfAttn, BiDAFSelfAttn_k, BiDAFRnet.")
+tf.app.flags.DEFINE_string("attention", "BiDAFRnet_k0", "Type of attention to be used. Options: BasicAttn, BiDAF, SelfAttn, Rnet, BiDAFSelfAttn, BiDAFSelfAttn_k, BiDAFRnet.")
 
 FLAGS = tf.app.flags.FLAGS
 os.environ["CUDA_VISIBLE_DEVICES"] = str(FLAGS.gpu)
