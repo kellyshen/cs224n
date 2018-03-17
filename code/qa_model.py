@@ -314,13 +314,19 @@ class QAModel(object):
                 blended_reps,
                 num_outputs=self.FLAGS.hidden_size) # blended_reps_final is shape (batch_size, context_len, hidden_size)
 
+        elif self.FLAGS.attention == "BiDAFSelfAttn_k0":
+            # Section numbers from R-Net paper
 
-        # Use a RNN to get hidden states for the context and the question
-            # Note: here the RNNEncoder is shared (i.e. the weights are the same)
-            # between the context and the question.
+            # 3.1: Question and Passage Encoder: Use RNN to get hidden states 
+            # for the context and the question.
+            # Identical for both BiDAF and SelfAttn alone, as here
             encoder = RNNEncoder(self.FLAGS.hidden_size, self.keep_prob)
             context_hiddens = encoder.build_graph(self.context_embs, self.context_mask) # (batch_size, context_len, hidden_size*2)
             question_hiddens = encoder.build_graph(self.qn_embs, self.qn_mask) # (batch_size, question_len, hidden_size*2)
+
+
+            # (No R-Net Paper section Number)
+            # Begin BiDAF Component
 
             bidaf_attn_layer = BiDirectionalAttn(
                 self.keep_prob,
@@ -337,35 +343,49 @@ class QAModel(object):
             # Multiple and combine attention c2q and q2c vectors and hidden context vector
             q2c_context = tf.multiply(context_hiddens, question_to_context)
             c2q_context = tf.multiply(context_hiddens, context_to_question)
-            blended_reps = tf.concat([context_hiddens, context_to_question, c2q_context, q2c_context], axis=2) # (batch_size, context_len, hidden_size*8)
-
-            # 3.3: Self-Matching Attention: Directly match the question-aware passage
-            # representation against itself
-            self_attn_layer = SelfAttn(self.keep_prob, self.FLAGS.hidden_size*4, self.FLAGS.context_len, self.FLAGS.self_attn_dim)
-            _, self_attn_output = self_attn_layer.build_graph(blended_reps, self.context_mask) # (batch_size, context_len, hidden_size*4)
-            # self_blended_reps is blended_reps_ concatted to self_attn_output
-            self_blended_reps = tf.concat([basic_blended_reps, self_attn_output], axis=2) # (batch_size, context_len, hidden_size*8)
-            
-
+            bidaf_blended_reps = tf.concat([context_hiddens, context_to_question, c2q_context, q2c_context], axis=2) # (batch_size, context_len, hidden_size*8)
 
             # We include 2 layers of bidirectional LSTM as modeling layers to
             # encode query-aware representations of context words. The baseline proposes
             # GRUcells, which typically have better performance effiency-wise, but LSTMCells
             # are proposed by the BiDAF paper and seem to give better results long-term.
-            modeling_layer = BiRNN(self.FLAGS.hidden_size, self.keep_prob)
-            self_blended_reps_1 = modeling_layer.build_graph(self_blended_reps, self.context_mask) # (batch_size, context_len, hidden_size*2).
-            
-            modeling_layer_2 = BiRNN2(self.FLAGS.hidden_size, self.keep_prob)
-            self_blended_reps_2 = modeling_layer_2.build_graph(self_blended_reps_1, self.context_mask) # (batch_size, context_len, hidden_size*2).
-  
+            bidaf_modeling_layer_1 = BiRNN(self.FLAGS.hidden_size, self.keep_prob)
+            bidaf_blended_reps_1 = bidaf_modeling_layer_1.build_graph(bidaf_blended_reps, self.context_mask)
+            # Uncomment the next line and comment out bidaf_modeling_layer_2/final for a single layer.
+            # bidaf_blended_reps_final = bidaf_modeling_layer_1.build_graph(bidaf_blended_reps, self.context_mask)
+
+            bidaf_modeling_layer_2 = BiRNN2(self.FLAGS.hidden_size, self.keep_prob)
+            bidaf_blended_reps_final = bidaf_modeling_layer_2.build_graph(bidaf_blended_reps_1, self.context_mask) # (batch_size, context_len, hidden_size*2).
+
+            # End BiDAF Component
+
+            # Begin remaining SelfAttn components
+
+            # 3.3: Self-Matching Attention: Directly match the question-aware passage
+            # representation against itself
+            selfattn_layer = SelfAttn(self.keep_prob, self.FLAGS.hidden_size*4, self.FLAGS.context_len, self.FLAGS.self_attn_dim)
+            _, selfattn_output = selfattn_layer.build_graph(bidaf_blended_reps, self.context_mask) # (batch_size, context_len, hidden_size*4)
+            # self_blended_reps is blended_reps_ concatted to self_attn_output
+            selfattn_blended_reps_final = tf.concat([bidaf_blended_reps, selfattn_output], axis=2) # (batch_size, context_len, hidden_size*8)
+
+
+            # ALTERNATIVE: RUN SELFATTN_BLENDED_REPS_FINAL THROUGH BIRNN3 AS ENCODER
+            # AND BUILDING GRAPH BEFORE STACKING MODELS TOGETHER?
+            # OR DO BOTH?
+
+            # Stack models together, before encoding current passage and question information
+            stacked_blended_reps = tf.concat([bidaf_blended_reps_final, selfattn_blended_reps_final], axis=2) # (batch_size, context_len, hidden_size*3)
+            stacked_encoder = BiRNN3(self.FLAGS.hidden_size, self.keep_prob)
+            blended_reps = stacked_encoder.build_graph(stacked_blended_reps, self.context_mask) # (batch_size, context_len, hidden_size*2).
+
             # Apply fully-connected layer to each blended representation. blended_reps_final
             # corresponds to b' (see handout), and tf.contrib.layers.fully_connected applies
             # ReLU non-linearity by default.
             blended_reps_final = tf.contrib.layers.fully_connected(
-                self_blended_reps_2,
-                num_outputs=self.FLAGS.hidden_size) # blended_reps_final has shape (batch_size, context_len, hidden_size)
-        
-        elif self.FLAGS.attention == "BiDAFSelfAttn_k":
+                blended_reps,
+                num_outputs=self.FLAGS.hidden_size) # blended_reps_final is shape (batch_size, context_len, hidden_size)
+
+        elif self.FLAGS.attention == "BiDAFSelfAttn_k": # this one sucks
             # Use a RNN to get hidden states for the context and the question
             # Note: here the RNNEncoder is shared (i.e. the weights are the same)
             # between the context and the question.
@@ -417,6 +437,158 @@ class QAModel(object):
                 num_outputs=self.FLAGS.hidden_size) # blended_reps_final has shape (batch_size, context_len, hidden_size)
         
         elif self.FLAGS.attention == "BiDAFRnet":
+            # Section numbers from R-Net paper
+
+            # 3.1: Question and Passage Encoder: Use RNN to get hidden states 
+            # for the context and the question.
+            # Identical for both BiDAF and SelfAttn alone, as here
+            encoder = RNNEncoder(self.FLAGS.hidden_size, self.keep_prob)
+            context_hiddens = encoder.build_graph(self.context_embs, self.context_mask) # (batch_size, context_len, hidden_size*2)
+            question_hiddens = encoder.build_graph(self.qn_embs, self.qn_mask) # (batch_size, question_len, hidden_size*2)
+
+            # (No R-Net Paper section Number)
+            # Begin BiDAF Component
+
+            bidaf_attn_layer = BiDirectionalAttn(
+                self.keep_prob,
+                self.FLAGS.hidden_size*2,
+                self.FLAGS.hidden_size*2,
+                self.FLAGS.question_len,
+                self.FLAGS.context_len)
+            context_to_question, question_to_context = bidaf_attn_layer.build_graph(
+                question_hiddens,
+                self.qn_mask,
+                context_hiddens,
+                self.context_mask)
+
+            # Multiple and combine attention c2q and q2c vectors and hidden context vector
+            q2c_context = tf.multiply(context_hiddens, question_to_context)
+            c2q_context = tf.multiply(context_hiddens, context_to_question)
+            bidaf_blended_reps = tf.concat([context_hiddens, context_to_question, c2q_context, q2c_context], axis=2) # (batch_size, context_len, hidden_size*8)
+
+            # We include 2 layers of bidirectional LSTM as modeling layers to
+            # encode query-aware representations of context words. The baseline proposes
+            # GRUcells, which typically have better performance effiency-wise, but LSTMCells
+            # are proposed by the BiDAF paper and seem to give better results long-term.
+            bidaf_modeling_layer_1 = BiRNN(self.FLAGS.hidden_size, self.keep_prob)
+            bidaf_blended_reps_1 = bidaf_modeling_layer_1.build_graph(bidaf_blended_reps, self.context_mask)
+            # Uncomment the next line and comment out bidaf_modeling_layer_2/final for a single layer.
+            # bidaf_blended_reps_final = bidaf_modeling_layer_1.build_graph(bidaf_blended_reps, self.context_mask)
+
+            bidaf_modeling_layer_2 = BiRNN2(self.FLAGS.hidden_size, self.keep_prob)
+            bidaf_blended_reps_final = bidaf_modeling_layer_2.build_graph(bidaf_blended_reps_1, self.context_mask) # (batch_size, context_len, hidden_size*2).
+
+            # End BiDAF Component
+
+            # Begin remaining SelfAttn components
+
+            # 3.2: Gated Attention-Based Recurrent Networks (C2Q): Paper proposes
+            # gated attention-based recurrent network to incorporate question
+            # information into passage representation.
+            basic_attn_layer = BasicAttn(self.keep_prob, self.FLAGS.hidden_size*2, self.FLAGS.hidden_size*2)
+            _, basic_attn_output = basic_attn_layer.build_graph(question_hiddens, self.qn_mask, context_hiddens) # (batch_size, context_len, hidden_size*2)
+            # basic_blended_reps is basic_attn_output concatted to context_hiddens
+            basic_blended_reps = tf.concat([context_hiddens, basic_attn_output], axis=2) # (batch_size, context_len, hidden_size*4)
+
+            # 3.3: Self-Matching Attention: Directly match the question-aware passage
+            # representation against itself
+            selfattn_layer = SelfAttn(self.keep_prob, self.FLAGS.hidden_size*4, self.FLAGS.context_len, self.FLAGS.self_attn_dim)
+            _, selfattn_output = selfattn_layer.build_graph(basic_blended_reps, self.context_mask) # (batch_size, context_len, hidden_size*4)
+            # self_blended_reps is blended_reps_ concatted to self_attn_output
+            selfattn_blended_reps_final = tf.concat([basic_blended_reps, selfattn_output], axis=2) # (batch_size, context_len, hidden_size*8)
+
+
+            # ALTERNATIVE: RUN SELFATTN_BLENDED_REPS_FINAL THROUGH BIRNN3 AS ENCODER
+            # AND BUILDING GRAPH BEFORE STACKING MODELS TOGETHER?
+            # OR DO BOTH?
+
+            # Stack models together, before encoding current passage and question information
+            stacked_blended_reps = tf.concat([bidaf_blended_reps_final, selfattn_blended_reps_final], axis=2) # (batch_size, context_len, hidden_size*3)
+            stacked_encoder = BiRNN3(self.FLAGS.hidden_size, self.keep_prob)
+            blended_reps = stacked_encoder.build_graph(stacked_blended_reps, self.context_mask) # (batch_size, context_len, hidden_size*2).
+
+
+            r_encoder = RNN(self.FLAGS.hidden_size, self.keep_prob) # (batch_size, contex_len, hidden_size)
+            c = tf.matmul(self_attn_dist, blended_reps) # (batch_size, contex_len, contex_len) * (batch_size, context_len, hidden_size*2)
+            h_a = r_encoder.build_graph(c, self.context_mask) # (batch_size, context_len, hidden_size)
+
+            # blended_reps_final is shape (batch_size, context_len, hidden_size)
+            f_sum = FullySum(self.FLAGS.hidden_size*2, self.FLAGS.hidden_size, self.FLAGS.hidden_size)
+            blended_reps_final = f_sum.build_graph(blended_reps, h_a)
+
+        elif self.FLAGS.attention == "BiDAFRnet_k0":
+            # Section numbers from R-Net paper
+
+            # 3.1: Question and Passage Encoder: Use RNN to get hidden states 
+            # for the context and the question.
+            # Identical for both BiDAF and SelfAttn alone, as here
+            encoder = RNNEncoder(self.FLAGS.hidden_size, self.keep_prob)
+            context_hiddens = encoder.build_graph(self.context_embs, self.context_mask) # (batch_size, context_len, hidden_size*2)
+            question_hiddens = encoder.build_graph(self.qn_embs, self.qn_mask) # (batch_size, question_len, hidden_size*2)
+
+            # (No R-Net Paper section Number)
+            # Begin BiDAF Component
+
+            bidaf_attn_layer = BiDirectionalAttn(
+                self.keep_prob,
+                self.FLAGS.hidden_size*2,
+                self.FLAGS.hidden_size*2,
+                self.FLAGS.question_len,
+                self.FLAGS.context_len)
+            context_to_question, question_to_context = bidaf_attn_layer.build_graph(
+                question_hiddens,
+                self.qn_mask,
+                context_hiddens,
+                self.context_mask)
+
+            # Multiple and combine attention c2q and q2c vectors and hidden context vector
+            q2c_context = tf.multiply(context_hiddens, question_to_context)
+            c2q_context = tf.multiply(context_hiddens, context_to_question)
+            bidaf_blended_reps = tf.concat([context_hiddens, context_to_question, c2q_context, q2c_context], axis=2) # (batch_size, context_len, hidden_size*8)
+
+            # We include 2 layers of bidirectional LSTM as modeling layers to
+            # encode query-aware representations of context words. The baseline proposes
+            # GRUcells, which typically have better performance effiency-wise, but LSTMCells
+            # are proposed by the BiDAF paper and seem to give better results long-term.
+            bidaf_modeling_layer_1 = BiRNN(self.FLAGS.hidden_size, self.keep_prob)
+            bidaf_blended_reps_1 = bidaf_modeling_layer_1.build_graph(bidaf_blended_reps, self.context_mask)
+            # Uncomment the next line and comment out bidaf_modeling_layer_2/final for a single layer.
+            # bidaf_blended_reps_final = bidaf_modeling_layer_1.build_graph(bidaf_blended_reps, self.context_mask)
+
+            bidaf_modeling_layer_2 = BiRNN2(self.FLAGS.hidden_size, self.keep_prob)
+            bidaf_blended_reps_final = bidaf_modeling_layer_2.build_graph(bidaf_blended_reps_1, self.context_mask) # (batch_size, context_len, hidden_size*2).
+
+            # End BiDAF Component
+
+            # Begin remaining SelfAttn components
+
+            # 3.3: Self-Matching Attention: Directly match the question-aware passage
+            # representation against itself
+            selfattn_layer = SelfAttn(self.keep_prob, self.FLAGS.hidden_size*4, self.FLAGS.context_len, self.FLAGS.self_attn_dim)
+            _, selfattn_output = selfattn_layer.build_graph(bidaf_blended_reps, self.context_mask) # (batch_size, context_len, hidden_size*4)
+            # self_blended_reps is blended_reps_ concatted to self_attn_output
+            selfattn_blended_reps_final = tf.concat([bidaf_blended_reps, selfattn_output], axis=2) # (batch_size, context_len, hidden_size*8)
+
+
+            # ALTERNATIVE: RUN SELFATTN_BLENDED_REPS_FINAL THROUGH BIRNN3 AS ENCODER
+            # AND BUILDING GRAPH BEFORE STACKING MODELS TOGETHER?
+            # OR DO BOTH?
+
+            # Stack models together, before encoding current passage and question information
+            stacked_blended_reps = tf.concat([bidaf_blended_reps_final, selfattn_blended_reps_final], axis=2) # (batch_size, context_len, hidden_size*3)
+            stacked_encoder = BiRNN3(self.FLAGS.hidden_size, self.keep_prob)
+            blended_reps = stacked_encoder.build_graph(stacked_blended_reps, self.context_mask) # (batch_size, context_len, hidden_size*2).
+
+
+            r_encoder = RNN(self.FLAGS.hidden_size, self.keep_prob) # (batch_size, contex_len, hidden_size)
+            c = tf.matmul(self_attn_dist, blended_reps) # (batch_size, contex_len, contex_len) * (batch_size, context_len, hidden_size*2)
+            h_a = r_encoder.build_graph(c, self.context_mask) # (batch_size, context_len, hidden_size)
+
+            # blended_reps_final is shape (batch_size, context_len, hidden_size)
+            f_sum = FullySum(self.FLAGS.hidden_size*2, self.FLAGS.hidden_size, self.FLAGS.hidden_size)
+            blended_reps_final = f_sum.build_graph(blended_reps, h_a)
+
+        elif self.FLAGS.attention == "BiDAFRnet_k":
             # Section numbers from R-Net paper
             
             encoder = RNNEncoder(self.FLAGS.hidden_size, self.keep_prob)
