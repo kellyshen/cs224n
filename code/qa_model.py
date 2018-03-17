@@ -30,7 +30,7 @@ from tensorflow.python.ops import embedding_ops
 from evaluate import exact_match_score, f1_score
 from data_batcher import get_batch_generator
 from pretty_print import print_example
-from modules import RNNEncoder, RNNEncoder2, SimpleSoftmaxLayer, BasicAttn, BiDirectionalAttn, SelfAttn, BiRNN, BiRNN2, BiRNN3, RNN, FullySum
+from modules import RNNEncoder, RNNEncoder2, SimpleSoftmaxLayer, BasicAttn, BiDirectionalAttn, SelfAttn, BiRNN, BiRNN2, BiRNN3, BiRNN4, RNN, FullySum
 
 logging.basicConfig(level=logging.INFO)
 
@@ -505,7 +505,10 @@ class QAModel(object):
             # Stack models together, before encoding current passage and question information
             stacked_blended_reps = tf.concat([bidaf_blended_reps_final, selfattn_blended_reps_final], axis=2) # (batch_size, context_len, hidden_size*3)
             stacked_encoder = BiRNN3(self.FLAGS.hidden_size, self.keep_prob)
-            blended_reps = stacked_encoder.build_graph(stacked_blended_reps, self.context_mask) # (batch_size, context_len, hidden_size*2).
+            blended_reps1 = stacked_encoder.build_graph(stacked_blended_reps, self.context_mask) # (batch_size, context_len, hidden_size*2).
+
+            stacked_encoder2 = BiRNN4(self.FLAGS.hidden_size, self.keep_prob)
+            blended_reps = stacked_encoder2.build_graph(blended_reps1, self.context_mask) # (batch_size, context_len, hidden_size*2).
 
 
             r_encoder = RNN(self.FLAGS.hidden_size, self.keep_prob) # (batch_size, contex_len, hidden_size)
