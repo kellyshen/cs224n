@@ -815,19 +815,18 @@ class QAModel(object):
         #start_pos = np.argmax(start_dist, axis=1)
         #end_pos = np.argmax(end_dist, axis=1)
 
-        candidates = []
-        for i in range(15):
+        probs_all = [] # 16 x B
+        starts_all = []
+        for i in range(16):
             end_array = np.concatenate((np.zeros((i,self.FLAGS.batch_size)), np.array(end_dist.T[:self.FLAGS.context_len - i])), 0).T
-            probs = np.multiply(np.array(start_dist), np.array(end_array))
-            print 'probs is ', probs
-            start = np.argmax(probs, axis=1)
-            print 'start is ', start
-            print 'probs[start]', probs[start]
-            candidates.append([probs[start], start, start+i])
-        best = max(candidates, key=lambda x:x[0])
-        best_score, start_pos, end_pos = best
-
-
+            probs = np.multiply(np.array(start_dist), np.array(end_array)) # B x 16
+            starts = np.argmax(probs, axis=1) # B, 
+            probs_max = np.max(probs, axis=1) 
+            starts_all.append(starts) 
+            probs_all.append(probs_max) 
+        max_dists = np.argmax(np.array(probs_all), axis=0) # B, 
+        start_pos = np.array(starts_all).T[[i for i in range(self.FLAGS.batch_size)], max_dists] # B
+        end_pos = start_pos + max_dists
         return start_pos, end_pos
 
 
