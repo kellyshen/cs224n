@@ -363,10 +363,10 @@ class QAModel(object):
 
             # 3.3: Self-Matching Attention: Directly match the question-aware passage
             # representation against itself
-            selfattn_layer = SelfAttn(self.keep_prob, self.FLAGS.hidden_size*4, self.FLAGS.context_len, self.FLAGS.self_attn_dim)
-            _, selfattn_output = selfattn_layer.build_graph(bidaf_blended_reps, self.context_mask) # (batch_size, context_len, hidden_size*4)
+            selfattn_layer = SelfAttn(self.keep_prob, self.FLAGS.hidden_size*8, self.FLAGS.context_len, self.FLAGS.self_attn_dim)
+            _, selfattn_output = selfattn_layer.build_graph(bidaf_blended_reps, self.context_mask) # (batch_size, context_len, hidden_size*8)
             # self_blended_reps is blended_reps_ concatted to self_attn_output
-            selfattn_blended_reps_final = tf.concat([bidaf_blended_reps, selfattn_output], axis=2) # (batch_size, context_len, hidden_size*8)
+            selfattn_blended_reps_final = tf.concat([bidaf_blended_reps, selfattn_output], axis=2) # (batch_size, context_len, hidden_size*16)
 
 
             # ALTERNATIVE: RUN SELFATTN_BLENDED_REPS_FINAL THROUGH BIRNN3 AS ENCODER
