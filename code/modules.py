@@ -373,7 +373,104 @@ class SelfAttn(object):
             output = tf.nn.dropout(output, self.keep_prob)              # (batch_size, num_keys, value_vec_size)
             # print("output: ", output.get_shape().as_list())
 
-            return output
+            return attn_dist, output
+
+class FullySum(object):
+    """
+    """
+    def __init__(self, value_vec_size1, value_vec_size2, hidden_size):
+        """
+        Inputs:
+            keep_prob: tensor containing a single scalar that is the keep probability (for dropout)
+            value_vec_size: size of the value vectors. int
+            num_keys: number of keys. int
+        """
+        self.value_vec_size1 = value_vec_size1
+        self.value_vec_size2 = value_vec_size2
+        self.hidden_size = hidden_size
+
+    def build_graph(self, values1, values2):
+        """
+        Inputs:
+            values: Tensor shape (batch_size, num_keys, value_vec_size)
+                blended representations of questions and contexts
+            keys_mask: Tensor shape (batch_size, num_keys).
+                1s where there's real input, 0s where there's padding
+        """
+        with vs.variable_scope("FullySum"):
+            W_1 = tf.get_variable(
+                'W_1',
+                shape=[self.value_vec_size1, self.hidden_size],
+                initializer=tf.contrib.layers.xavier_initializer())       
+            W_2 = tf.get_variable(
+                'W_2',
+                shape=[self.value_vec_size2, self.hidden_size],
+                initializer=tf.contrib.layers.xavier_initializer())
+            B = tf.get_variable(
+                'B',
+                shape=[1, self.hidden_size],
+                initializer=tf.contrib.layers.xavier_initializer())
+
+            #print("W_1: ", W_1.get_shape().as_list())
+            #print(tf.expand_dims(W_1,0).get_shape().as_list())
+            #print("W_2: ", W_2.get_shape().as_list())
+            #print("B: ", B.get_shape().as_list())
+            #print("values1: ", values1.get_shape().as_list())
+            #print("values2: ", values2.get_shape().as_list())
+           # temp = tf.einsum('bnj,jh->bnh', values1, W_1)
+            #print(temp.get_shape().as_list())
+
+            mul = tf.einsum('bnj,jh->bnh', values1, W_1) + tf.einsum('bnj,jh->bnh', values2, W_2)
+            #print(tf.add(mul, B).get_shape().as_list())
+
+            return tf.tanh(mul + B) #(batch_size, num_keys, hidden size)
+
+class RNN(object):
+    """
+    Feeds input through a RNN and returns all the hidden states.
+
+    This code uses a bidirectional LSTM.
+    """
+    def __init__(self, hidden_size, keep_prob):
+        """
+        Inputs:
+          hidden_size: int. Hidden size of the RNN
+          keep_prob: Tensor containing a single scalar that is the keep probability (for dropout)
+        """
+        self.hidden_size = hidden_size
+        self.keep_prob = keep_prob
+
+        # Forward
+        self.rnn_cell_fw = rnn_cell.LSTMCell(self.hidden_size)
+        self.rnn_cell_fw = DropoutWrapper(self.rnn_cell_fw, input_keep_prob=self.keep_prob)
+        
+    def build_graph(self, inputs, masks):
+        """
+        Inputs:
+          inputs: Tensor shape (batch_size, seq_len, input_size)
+          masks: Tensor shape (batch_size, seq_len).
+            Has 1s where there is real input, 0s where there's padding.
+            This is used to make sure tf.nn.bidirectional_dynamic_rnn doesn't iterate through masked steps.
+        
+        Returns:
+            out: Tensor shape (batch_size, seq_len, hidden_size*2).
+            This is all hidden states (fw and bw hidden states are concatenated).
+        """
+        with vs.variable_scope("RNN"):
+            input_lens = tf.reduce_sum(masks, reduction_indices=1) # shape (batch_size)
+
+            # (fw_out, bw_out) are  hidden states for every timestep.
+            # Shape for fw_out and bw_out are (batch_size, seq_len, hidden_size).
+            out, _ = tf.nn.dynamic_rnn(
+                self.rnn_cell_fw,
+                inputs,
+                input_lens,
+                dtype=tf.float32)
+
+            # Apply dropout/keep_prob
+            out = tf.nn.dropout(out, self.keep_prob)
+
+            return out
 
 
 class BiRNN(object):
