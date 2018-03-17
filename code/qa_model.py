@@ -817,7 +817,7 @@ class QAModel(object):
 
         candidates = []
         for i in range(15):
-            end_array = np.concatenate((np.zeros((i,self.batch_size)), end.T[:self.contex_len - i]), 0).T
+            end_array = np.concatenate((np.zeros((i,self.FLAGS.batch_size)), end.T[:self.FLAGS.context_len - i]), 0).T
             probs = tf.multiply(start_pos, end_array)
             start = np.argmax(probs, axis=1)
             candidates = [probs[start], start, start+i]
