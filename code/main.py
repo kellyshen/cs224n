@@ -44,7 +44,7 @@ tf.app.flags.DEFINE_string("experiment_name", "", "Unique name for your experime
 tf.app.flags.DEFINE_integer("num_epochs", 0, "Number of epochs to train. 0 means train indefinitely")
 
 # Hyperparameters
-tf.app.flags.DEFINE_float("learning_rate", 0.005, "Learning rate.")
+tf.app.flags.DEFINE_float("learning_rate", 0.001, "Learning rate.")
 tf.app.flags.DEFINE_float("max_gradient_norm", 5.0, "Clip gradients to this norm.")
 tf.app.flags.DEFINE_float("dropout", 0.15, "Fraction of units randomly dropped on non-recurrent connections.")
 tf.app.flags.DEFINE_integer("batch_size", 100, "Batch size to use")
@@ -69,7 +69,7 @@ tf.app.flags.DEFINE_string("json_in_path", "", "For official_eval mode, path to 
 tf.app.flags.DEFINE_string("json_out_path", "predictions.json", "Output path for official_eval mode. Defaults to predictions.json")
 
 # Attention flag to use
-tf.app.flags.DEFINE_string("attention", "BiDAFSelfAttn", "Type of attention to be used. Options: BasicAttn, BiDAF, SelfAttn, Rnet, BiDAFSelfAttn, BiDAFSelfAttn_k, BiDAFRnet.")
+tf.app.flags.DEFINE_string("attention", "BiDAFRnet", "Type of attention to be used. Options: BasicAttn, BiDAF, SelfAttn, Rnet, BiDAFSelfAttn, BiDAFSelfAttn_k, BiDAFRnet.")
 
 FLAGS = tf.app.flags.FLAGS
 os.environ["CUDA_VISIBLE_DEVICES"] = str(FLAGS.gpu)
