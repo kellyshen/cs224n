@@ -30,7 +30,7 @@ from tensorflow.python.ops import embedding_ops
 from evaluate import exact_match_score, f1_score
 from data_batcher import get_batch_generator
 from pretty_print import print_example
-from modules import RNNEncoder, RNNEncoder2, SimpleSoftmaxLayer, BasicAttn, BiDirectionalAttn, SelfAttn, BiRNN, BiRNN2, BiRNN3, BiRNN4, RNN, FullySum
+from modules import RNNEncoder, RNNEncoder2, SimpleSoftmaxLayer, BasicAttn, BiDirectionalAttn, BiDirectionalAttn2, SelfAttn, BiRNN, BiRNN2, BiRNN3, BiRNN4, RNN, FullySum
 
 logging.basicConfig(level=logging.INFO)
 
@@ -183,6 +183,8 @@ class QAModel(object):
                 context_hiddens,
                 self.context_mask)
 
+            print("context_hiddens: ", context_hiddens.get_shape().as_list())
+
             # Multiple and combine attention c2q and q2c vectors and hidden context vector
             q2c_context = tf.multiply(context_hiddens, question_to_context)
             c2q_context = tf.multiply(context_hiddens, context_to_question)
@@ -284,7 +286,7 @@ class QAModel(object):
             # Multiple and combine attention c2q and q2c vectors and hidden context vector
             q2c_context = tf.multiply(context_hiddens, question_to_context)
             c2q_context = tf.multiply(context_hiddens, context_to_question)
-            blended_reps = tf.concat([context_hiddens, context_to_question, c2q_context, q2c_context], axis=2) # (batch_size, context_len, hidden_size*8)
+            bidaf_blended_reps = tf.concat([context_hiddens, context_to_question, c2q_context, q2c_context], axis=2) # (batch_size, context_len, hidden_size*8)
 
 
             #### START RNET #####
