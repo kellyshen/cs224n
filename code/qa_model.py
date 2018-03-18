@@ -307,8 +307,8 @@ class QAModel(object):
             stacked_encoder = BiRNN3(self.FLAGS.hidden_size, self.keep_prob)
             blended_reps = stacked_encoder.build_graph(stacked_blended_reps, self.context_mask) # (batch_size, context_len, hidden_size*2).
 
-            stacked_encoder2 = BiRNN4(self.FLAGS.hidden_size, self.keep_prob)
-            blended_reps = stacked_encoder2.build_graph(blended_reps, self.context_mask) # (batch_size, context_len, hidden_size*2).
+            # stacked_encoder2 = BiRNN4(self.FLAGS.hidden_size, self.keep_prob)
+            # blended_reps = stacked_encoder2.build_graph(blended_reps, self.context_mask) # (batch_size, context_len, hidden_size*2).
 
             # Apply fully-connected layer to each blended representation. blended_reps_final
             # corresponds to b' (see handout), and tf.contrib.layers.fully_connected applies
@@ -496,7 +496,7 @@ class QAModel(object):
             # 3.3: Self-Matching Attention: Directly match the question-aware passage
             # representation against itself
             selfattn_layer = SelfAttn(self.keep_prob, self.FLAGS.hidden_size*4, self.FLAGS.context_len, self.FLAGS.self_attn_dim)
-            _, selfattn_output = selfattn_layer.build_graph(basic_blended_reps, self.context_mask) # (batch_size, context_len, hidden_size*4)
+            self_attn_dist, selfattn_output = selfattn_layer.build_graph(basic_blended_reps, self.context_mask) # (batch_size, context_len, hidden_size*4)
             # self_blended_reps is blended_reps_ concatted to self_attn_output
             selfattn_blended_reps_final = tf.concat([basic_blended_reps, selfattn_output], axis=2) # (batch_size, context_len, hidden_size*8)
 
