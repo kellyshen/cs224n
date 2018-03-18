@@ -961,7 +961,7 @@ class QAModel(object):
         return probdist_start, probdist_end
 
 
-    def get_start_end_pos(self, session, batch):
+    def get_start_end_pos_orig(self, session, batch):
         """
         Run forward-pass only; get the most likely answer span.
 
@@ -984,7 +984,7 @@ class QAModel(object):
         return start_pos, end_pos
 
 
-    def get_start_end_pos2(self, session, batch):
+    def get_start_end_pos(self, session, batch):
         """
         Run forward-pass only; get the most likely answer span.
 
@@ -1164,7 +1164,7 @@ class QAModel(object):
 
         return f1_total, em_total
 
-    def check_f1_em2(self, session, context_path, qn_path, ans_path, dataset, num_samples=100, print_to_screen=False):
+    def check_f1_em_orig(self, session, context_path, qn_path, ans_path, dataset, num_samples=100, print_to_screen=False):
         """
         Sample from the provided (train/dev) set.
         For each sample, calculate F1 and EM score.
@@ -1202,7 +1202,7 @@ class QAModel(object):
         # That means we're truncating, rather than discarding, examples with too-long context or questions
         for batch in get_batch_generator(self.word2id, context_path, qn_path, ans_path, self.FLAGS.batch_size, context_len=self.FLAGS.context_len, question_len=self.FLAGS.question_len, discard_long=False):
 
-            pred_start_pos, pred_end_pos = self.get_start_end_pos2(session, batch)
+            pred_start_pos, pred_end_pos = self.get_start_end_pos_orig(session, batch)
 
             # Convert the start and end positions to lists length batch_size
             pred_start_pos = pred_start_pos.tolist() # list length batch_size
