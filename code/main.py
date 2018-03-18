@@ -39,7 +39,7 @@ EXPERIMENTS_DIR = os.path.join(MAIN_DIR, "experiments") # relative path of exper
 
 # High-level options
 tf.app.flags.DEFINE_integer("gpu", 0, "Which GPU to use, if you have multiple.")
-tf.app.flags.DEFINE_string("mode", "train", "Available modes: train / show_examples / official_eval")
+tf.app.flags.DEFINE_string("mode", "train", "Available modes: train / show_examples / official_eval / recalculate_score")
 tf.app.flags.DEFINE_string("experiment_name", "", "Unique name for your experiment. This will create a directory by this name in the experiments/ directory, which will hold all data related to this experiment")
 tf.app.flags.DEFINE_integer("num_epochs", 0, "Number of epochs to train. 0 means train indefinitely")
 
@@ -168,7 +168,7 @@ def main(unused_argv):
             qa_model.train(sess, train_context_path, train_qn_path, train_ans_path, dev_qn_path, dev_context_path, dev_ans_path)
 
     elif FLAGS.mode == "recalculate_score":
-
+        with tf.Session(config=config) as sess:
             # Load best model
             initialize_model(sess, qa_model, bestmodel_dir, expect_exists=True)
 
