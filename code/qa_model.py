@@ -164,6 +164,40 @@ class QAModel(object):
             modeling_layer_2 = BiRNN2(self.FLAGS.hidden_size, self.keep_prob)
             blended_reps_final = modeling_layer_2.build_graph(blended_reps_1, self.context_mask) # (batch_size, context_len, hidden_size*2).
         
+        elif self.FLAGS.attention == "bidaf2":
+            # Use a RNN to get hidden states for the context and the question
+            # Note: here the RNNEncoder is shared (i.e. the weights are the same)
+            # between the context and the question.
+            encoder = RNNEncoder(self.FLAGS.hidden_size, self.keep_prob)
+            context_hiddens = encoder.build_graph(self.context_embs, self.context_mask) # (batch_size, context_len, hidden_size*2)
+            question_hiddens = encoder.build_graph(self.qn_embs, self.qn_mask) # (batch_size, question_len, hidden_size*2)
+
+            bidaf_attn_layer = BiDirectionalAttn2(
+                self.keep_prob,
+                self.FLAGS.hidden_size*2,
+                self.FLAGS.question_len,
+                self.FLAGS.context_len)
+            context_to_question, question_to_context = bidaf_attn_layer.build_graph(
+                question_hiddens,
+                self.qn_mask,
+                context_hiddens,
+                self.context_mask)
+
+            # Multiple and combine attention c2q and q2c vectors and hidden context vector
+            q2c_context = tf.multiply(context_hiddens, question_to_context)
+            c2q_context = tf.multiply(context_hiddens, context_to_question)
+            blended_reps = tf.concat([context_hiddens, context_to_question, c2q_context, q2c_context], axis=2) # (batch_size, context_len, hidden_size*8)
+
+            # We include 2 layers of bidirectional LSTM as modeling layers to
+            # encode query-aware representations of context words. The baseline proposes
+            # GRUcells, which typically have better performance effiency-wise, but LSTMCells
+            # are proposed by the BiDAF paper and seem to give better results long-term.
+            modeling_layer = BiRNN(self.FLAGS.hidden_size, self.keep_prob)
+            blended_reps_1 = modeling_layer.build_graph(blended_reps, self.context_mask) # (batch_size, context_len, hidden_size*2).
+            
+            modeling_layer_2 = BiRNN2(self.FLAGS.hidden_size, self.keep_prob)
+            blended_reps_final = modeling_layer_2.build_graph(blended_reps_1, self.context_mask) # (batch_size, context_len, hidden_size*2).
+        
 
         elif self.FLAGS.attention == 'arch1':
 
@@ -210,6 +244,68 @@ class QAModel(object):
             self_blended_reps = tf.concat([basic_attn_output, self_attn_output], axis=2) # (batch_size, context_len, hidden_size*8)
             
             combined_blended_reps = tf.concat([bidaf_blended_reps, self_blended_reps], axis=2)
+
+            # Encode current passage and question information
+            modeling_layer1 = BiRNN(self.FLAGS.hidden_size, self.keep_prob)            
+            blended_reps1 = modeling_layer1.build_graph(combined_blended_reps, self.context_mask)  # (batch_size, context_len, hidden_size*2)
+
+            modeling_layer2 = BiRNN2(self.FLAGS.hidden_size, self.keep_prob)
+            blended_reps = modeling_layer2.build_graph(blended_reps1, self.context_mask) # (batch_size, context_len, hidden_size*2).
+            
+            r_encoder = RNN(self.FLAGS.hidden_size, self.keep_prob) # (batch_size, contex_len, hidden_size)
+            c = tf.matmul(self_attn_dist, blended_reps) # (batch_size, contex_len, contex_len) * (batch_size, context_len, hidden_size*2)
+            h_a = r_encoder.build_graph(c, self.context_mask) # (batch_size, context_len, hidden_size)
+
+            # blended_reps_final is shape (batch_size, context_len, hidden_size)
+            f_sum = FullySum(self.FLAGS.hidden_size*2, self.FLAGS.hidden_size, self.FLAGS.hidden_size)
+            blended_reps_final = f_sum.build_graph(blended_reps, h_a)
+
+
+        elif self.FLAGS.attention == 'arch2':
+
+            # Use a RNN to get hidden states for the context and the question
+            # Note: here the RNNEncoder is shared (i.e. the weights are the same)
+            # between the context and the question.
+            encoder = RNNEncoder(self.FLAGS.hidden_size, self.keep_prob)
+            context_hiddens = encoder.build_graph(self.context_embs, self.context_mask) # (batch_size, context_len, hidden_size*2)
+            question_hiddens = encoder.build_graph(self.qn_embs, self.qn_mask) # (batch_size, question_len, hidden_size*2)
+
+            bidaf_attn_layer = BiDirectionalAttn2(
+                self.keep_prob,
+                self.FLAGS.hidden_size*2,
+                self.FLAGS.question_len,
+                self.FLAGS.context_len)
+            context_to_question, question_to_context = bidaf_attn_layer.build_graph(
+                question_hiddens,
+                self.qn_mask,
+                context_hiddens,
+                self.context_mask)
+
+            # Multiple and combine attention c2q and q2c vectors and hidden context vector
+            q2c_context = tf.multiply(context_hiddens, question_to_context)
+            c2q_context = tf.multiply(context_hiddens, context_to_question)
+            blended_reps = tf.concat([context_hiddens, context_to_question, c2q_context, q2c_context], axis=2) # (batch_size, context_len, hidden_size*8)
+
+
+            #### START RNET #####
+
+            # 3.2: Gated Attention-Based Recurrent Networks (C2Q): Paper proposes
+            # gated attention-based recurrent network to incorporate question
+            # information into passage representation.
+            basic_attn_layer = BasicAttn(self.keep_prob, self.FLAGS.hidden_size*2, self.FLAGS.hidden_size*2)
+            _, basic_attn_output = basic_attn_layer.build_graph(question_hiddens, self.qn_mask, context_hiddens) # (batch_size, context_len, hidden_size*2)
+            # basic_blended_reps is basic_attn_output concatted to context_hiddens
+            #basic_blended_reps = tf.concat([context_hiddens, basic_attn_output], axis=2) # (batch_size, context_len, hidden_size*4)
+
+            # 3.3: Self-Matching Attention: Directly match the question-aware passage
+            # representation against itself
+            self_attn_layer = SelfAttn(self.keep_prob, self.FLAGS.hidden_size*2, self.FLAGS.context_len, self.FLAGS.self_attn_dim)
+            self_attn_dist, self_attn_output = self_attn_layer.build_graph(basic_attn_output, self.context_mask) # (batch_size, context_len, hidden_size*4)
+            # self_blended_reps is blended_reps_ concatted to self_attn_output
+            self_blended_reps = tf.concat([basic_attn_output, self_attn_output], axis=2) # (batch_size, context_len, hidden_size*4)
+            
+            combined_blended_reps = tf.concat([bidaf_blended_reps, self_blended_reps], axis=2)
+
 
             # Encode current passage and question information
             modeling_layer1 = BiRNN(self.FLAGS.hidden_size, self.keep_prob)            
