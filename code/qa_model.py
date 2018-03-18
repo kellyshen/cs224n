@@ -981,6 +981,49 @@ class QAModel(object):
         start_pos = np.argmax(start_dist, axis=1)
         end_pos = np.argmax(end_dist, axis=1)
 
+        return start_pos, end_pos
+
+
+    def get_start_end_pos2(self, session, batch):
+        """
+        Run forward-pass only; get the most likely answer span.
+
+        Inputs:
+          session: TensorFlow session
+          batch: Batch object
+
+        Returns:
+          start_pos, end_pos: both numpy arrays shape (batch_size).
+            The most likely start and end positions for each example in the batch.
+        """
+        # Get start_dist and end_dist, both shape (batch_size, context_len)
+        start_dist, end_dist = self.get_prob_dists(session, batch)
+        x, y = start_dist.shape
+
+        start_pos = np.argmax(start_dist, axis=1)
+        end_pos = np.argmax(end_dist, axis=1)
+        best_so_far = 0.0
+
+        indices_best_starts = start_dist.argsort()[-10:][::-1]
+        indices_best_ends = end_dist.argsort()[-10:][::-1]
+
+        for i in indices_best_starts:
+            for j in indices_best_ends:
+                if j >= i:
+                    curr_prob = start_dist[i] * end_dist[j]
+                    if k > i + 15:
+                        curr_prob*=0.8
+                    if i > 200 or j > 250:
+                        curr_prob*=0.8
+                    if curr_prob > best_so_far:
+                        start_pos = i
+                        end_pos = j
+                        best_so_far = curr_prob
+
+        # Take argmax to get start_pos and end_post, both shape (batch_size)
+        # start_pos = np.argmax(start_dist, axis=1)
+        # end_pos = np.argmax(end_dist, axis=1)
+
         # probs_all = [] # 16 x B
         # starts_all = []
         # for i in range(16):
@@ -995,7 +1038,7 @@ class QAModel(object):
         # max_dists = np.argmax(np.array(probs_all), axis=0) # B, 
         # start_pos = np.array(starts_all).T[[i for i in range(x)], max_dists] # B
         # end_pos = start_pos + max_dists
-        
+
         return start_pos, end_pos
 
 
@@ -1120,6 +1163,85 @@ class QAModel(object):
 
         return f1_total, em_total
 
+    def check_f1_em2(self, session, context_path, qn_path, ans_path, dataset, num_samples=100, print_to_screen=False):
+        """
+        Sample from the provided (train/dev) set.
+        For each sample, calculate F1 and EM score.
+        Return average F1 and EM score for all samples.
+        Optionally pretty-print examples.
+
+        Note: This function is not quite the same as the F1/EM numbers you get from "official_eval" mode.
+        This function uses the pre-processed version of the e.g. dev set for speed,
+        whereas "official_eval" mode uses the original JSON. Therefore:
+          1. official_eval takes your max F1/EM score w.r.t. the three reference answers,
+            whereas this function compares to just the first answer (which is what's saved in the preprocessed data)
+          2. Our preprocessed version of the dev set is missing some examples
+            due to tokenization issues (see squad_preprocess.py).
+            "official_eval" includes all examples.
+
+        Inputs:
+          session: TensorFlow session
+          qn_path, context_path, ans_path: paths to {dev/train}.{question/context/answer} data files.
+          dataset: string. Either "train" or "dev". Just for logging purposes.
+          num_samples: int. How many samples to use. If num_samples=0 then do whole dataset.
+          print_to_screen: if True, pretty-prints each example to screen
+
+        Returns:
+          F1 and EM: Scalars. The average across the sampled examples.
+        """
+        logging.info("Calculating F1/EM custom for %s examples in %s set..." % (str(num_samples) if num_samples != 0 else "all", dataset))
+
+        f1_total = 0.
+        em_total = 0.
+        example_num = 0
+
+        tic = time.time()
+
+        # Note here we select discard_long=False because we want to sample from the entire dataset
+        # That means we're truncating, rather than discarding, examples with too-long context or questions
+        for batch in get_batch_generator(self.word2id, context_path, qn_path, ans_path, self.FLAGS.batch_size, context_len=self.FLAGS.context_len, question_len=self.FLAGS.question_len, discard_long=False):
+
+            pred_start_pos, pred_end_pos = self.get_start_end_pos2(session, batch)
+
+            # Convert the start and end positions to lists length batch_size
+            pred_start_pos = pred_start_pos.tolist() # list length batch_size
+            pred_end_pos = pred_end_pos.tolist() # list length batch_size
+
+            for ex_idx, (pred_ans_start, pred_ans_end, true_ans_tokens) in enumerate(zip(pred_start_pos, pred_end_pos, batch.ans_tokens)):
+                example_num += 1
+
+                # Get the predicted answer
+                # Important: batch.context_tokens contains the original words (no UNKs)
+                # You need to use the original no-UNK version when measuring F1/EM
+                pred_ans_tokens = batch.context_tokens[ex_idx][pred_ans_start : pred_ans_end + 1]
+                pred_answer = " ".join(pred_ans_tokens)
+
+                # Get true answer (no UNKs)
+                true_answer = " ".join(true_ans_tokens)
+
+                # Calc F1/EM
+                f1 = f1_score(pred_answer, true_answer)
+                em = exact_match_score(pred_answer, true_answer)
+                f1_total += f1
+                em_total += em
+
+                # Optionally pretty-print
+                if print_to_screen:
+                    print_example(self.word2id, batch.context_tokens[ex_idx], batch.qn_tokens[ex_idx], batch.ans_span[ex_idx, 0], batch.ans_span[ex_idx, 1], pred_ans_start, pred_ans_end, true_answer, pred_answer, f1, em)
+
+                if num_samples != 0 and example_num >= num_samples:
+                    break
+
+            if num_samples != 0 and example_num >= num_samples:
+                break
+
+        f1_total /= example_num
+        em_total /= example_num
+
+        toc = time.time()
+        logging.info("Calculating F1/EM for %i examples in %s set took %.2f seconds" % (example_num, dataset, toc-tic))
+
+        return f1_total, em_total
 
     def train(self, session, train_context_path, train_qn_path, train_ans_path, dev_qn_path, dev_context_path, dev_ans_path):
         """
@@ -1218,8 +1340,6 @@ class QAModel(object):
             logging.info("End of epoch %i. Time for epoch: %f" % (epoch, epoch_toc-epoch_tic))
 
         sys.stdout.flush()
-
-
 
 def write_summary(value, tag, summary_writer, global_step):
     """Write a single summary value to tensorboard"""

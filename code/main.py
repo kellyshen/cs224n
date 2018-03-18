@@ -167,6 +167,20 @@ def main(unused_argv):
             # Train
             qa_model.train(sess, train_context_path, train_qn_path, train_ans_path, dev_qn_path, dev_context_path, dev_ans_path)
 
+    elif FLAGS.mode == "recalculate_score":
+
+            # Load best model
+            initialize_model(sess, qa_model, bestmodel_dir, expect_exists=True)
+
+            # Get F1/EM on dev set and log to tensorboard
+            dev_f1, dev_em  = qa_model.check_f1_em(sess, dev_context_path, dev_qn_path, dev_ans_path, "dev", num_samples=0)
+            logging.info("Dev F1 score: %f, Dev EM score: %f" % (dev_f1, dev_em))
+            #write_summary(dev_f1, "dev/F1", summary_writer, global_step)
+            #write_summary(dev_em, "dev/EM", summary_writer, global_step)
+
+            # Get F1/EM_2 on dev set and log to tensorboard
+            dev_f1_2, dev_em_2  = qa_model.check_f1_em2(sess, dev_context_path, dev_qn_path, dev_ans_path, "dev", num_samples=0)
+            logging.info("custom Dev F1 score: %f, Dev EM score: %f" % (dev_f1_2, dev_em_2))
 
     elif FLAGS.mode == "show_examples":
         with tf.Session(config=config) as sess:
