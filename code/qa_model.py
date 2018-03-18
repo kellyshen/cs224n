@@ -1007,7 +1007,7 @@ class QAModel(object):
         indices_best_starts = np.argsort(start_dist, axis=1)[:,-10:]
         indices_best_ends = np.argsort(end_dist, axis=1)[:,-10:]
 
-        for b in len(indices_best_starts):
+        for b in range(len(indices_best_starts)):
             for i in indices_best_starts[b]:
                 for j in indices_best_ends[b]:
                     if j >= i:
