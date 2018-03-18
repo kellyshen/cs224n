@@ -129,7 +129,7 @@ class QAModel(object):
         print "Running %s Attention Model" % self.FLAGS.attention
 
 
-        if self.FLAGS.attention == "BiDAF":
+        if self.FLAGS.attention == "bidaf":
             # Use a RNN to get hidden states for the context and the question
             # Note: here the RNNEncoder is shared (i.e. the weights are the same)
             # between the context and the question.
@@ -226,7 +226,7 @@ class QAModel(object):
             f_sum = FullySum(self.FLAGS.hidden_size*2, self.FLAGS.hidden_size, self.FLAGS.hidden_size)
             blended_reps_final = f_sum.build_graph(blended_reps, h_a)
 
-        elif self.FLAGS.attention == "SelfAttn":
+        elif self.FLAGS.attention == "selfattn":
             # Section numbers from R-Net paper
             
             # 3.1: Question and Passage Encoder: Use RNN to get hidden states 
@@ -260,7 +260,7 @@ class QAModel(object):
                 blended_reps,
                 num_outputs=self.FLAGS.hidden_size) # blended_reps_final has shape (batch_size, context_len, hidden_size)
         
-        elif self.FLAGS.attention == "Rnet":
+        elif self.FLAGS.attention == "rnet":
             # Section numbers from R-Net paper
             
             # 3.1: Question and Passage Encoder: Use RNN to get hidden states 
@@ -296,7 +296,7 @@ class QAModel(object):
             f_sum = FullySum(self.FLAGS.hidden_size*2, self.FLAGS.hidden_size, self.FLAGS.hidden_size)
             blended_reps_final = f_sum.build_graph(blended_reps, h_a)
 
-        elif self.FLAGS.attention == "BiDAFSelfAttn":
+        elif self.FLAGS.attention == "bidaf_selfattn_parallel":
             # Section numbers from R-Net paper
 
             # 3.1: Question and Passage Encoder: Use RNN to get hidden states 
@@ -378,7 +378,7 @@ class QAModel(object):
                 blended_reps,
                 num_outputs=self.FLAGS.hidden_size) # blended_reps_final is shape (batch_size, context_len, hidden_size)
 
-        elif self.FLAGS.attention == "BiDAFSelfAttn_k0":
+        elif self.FLAGS.attention == "bidaf_selfattn_piped":
             # Section numbers from R-Net paper
 
             # 3.1: Question and Passage Encoder: Use RNN to get hidden states 
@@ -500,7 +500,7 @@ class QAModel(object):
                 self_blended_reps_2,
                 num_outputs=self.FLAGS.hidden_size) # blended_reps_final has shape (batch_size, context_len, hidden_size)
         
-        elif self.FLAGS.attention == "BiDAFRnet":
+        elif self.FLAGS.attention == "bidaf_rnet_parallel":
             # Section numbers from R-Net paper
 
             # 3.1: Question and Passage Encoder: Use RNN to get hidden states 
@@ -583,7 +583,7 @@ class QAModel(object):
             f_sum = FullySum(self.FLAGS.hidden_size*2, self.FLAGS.hidden_size, self.FLAGS.hidden_size)
             blended_reps_final = f_sum.build_graph(blended_reps, h_a)
 
-        elif self.FLAGS.attention == "BiDAFRnet_k0":
+        elif self.FLAGS.attention == "bidaf_rnet_piped":
             # Section numbers from R-Net paper
 
             # 3.1: Question and Passage Encoder: Use RNN to get hidden states 
