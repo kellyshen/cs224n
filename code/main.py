@@ -69,7 +69,7 @@ tf.app.flags.DEFINE_string("json_in_path", "", "For official_eval mode, path to 
 tf.app.flags.DEFINE_string("json_out_path", "predictions.json", "Output path for official_eval mode. Defaults to predictions.json")
 
 # Attention flag to use
-tf.app.flags.DEFINE_string("attention", "arch1", "basicattn, bidaf, selfattn, rnet, bidaf_selfattn_parallel, bidaf_selfattn_piped, bidaf_rnet_parallel, bidaf_rnet_piped, arch1")
+tf.app.flags.DEFINE_string("bidaf_selfattn_parallel", "arch1", "basicattn, bidaf, selfattn, rnet, bidaf_selfattn_parallel, bidaf_selfattn_piped, bidaf_rnet_parallel, bidaf_rnet_piped, arch1")
 
 FLAGS = tf.app.flags.FLAGS
 os.environ["CUDA_VISIBLE_DEVICES"] = str(FLAGS.gpu)
