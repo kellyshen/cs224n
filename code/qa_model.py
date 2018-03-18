@@ -1002,23 +1002,24 @@ class QAModel(object):
 
         start_pos = np.argmax(start_dist, axis=1)
         end_pos = np.argmax(end_dist, axis=1)
-        best_so_far = 0.0
+        best_so_far = np.zeros(len(start_pos))
 
-        indices_best_starts = start_dist.argsort()[-10:][::-1]
-        indices_best_ends = end_dist.argsort()[-10:][::-1]
+        indices_best_starts = np.argsort(start_dist, axis=1)[:,-10:]
+        indices_best_ends = np.argsort(end_dist, axis=1)[:,-10:]
 
-        for i in indices_best_starts:
-            for j in indices_best_ends:
-                if j >= i:
-                    curr_prob = start_dist[i] * end_dist[j]
-                    if k > i + 15:
-                        curr_prob*=0.8
-                    if i > 200 or j > 250:
-                        curr_prob*=0.8
-                    if curr_prob > best_so_far:
-                        start_pos = i
-                        end_pos = j
-                        best_so_far = curr_prob
+        for b in len(indices_best_starts):
+            for i in indices_best_starts[b]:
+                for j in indices_best_ends[b]:
+                    if j >= i:
+                        curr_prob = start_dist[b][i] * end_dist[b][j]
+                        if j > i + 15:
+                            curr_prob*=0.8
+                        if i > 200 or j > 250:
+                            curr_prob*=0.8
+                        if curr_prob > best_so_far[b]:
+                            start_pos[b] = i
+                            end_pos[b] = j
+                            best_so_far[b] = curr_prob
 
         # Take argmax to get start_pos and end_post, both shape (batch_size)
         # start_pos = np.argmax(start_dist, axis=1)
