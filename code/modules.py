@@ -304,49 +304,49 @@ class BiDirectionalAttn(object):
 
             ### Derive Similarity matrix S
             # Value matrix C
-            c_ = tf.reshape(values, [-1, value_vec_size])               # (batch_size * num_values, vec_size)
-            C = tf.matmul(c_, W_c)                                      # (batch_size * num_values, 1)
-            C = tf.reshape(C, [-1, self.num_values])                    # (batch_size, num_values)
-            C = tf.expand_dims(C, 1)                                    # (batch_size, 1, num_values)
+            c_ = tf.reshape(values, [-1, value_vec_size]) # (batch_size * num_values, vec_size)
+            C = tf.matmul(c_, W_c) # (batch_size * num_values, 1)
+            C = tf.reshape(C, [-1, self.num_values]) # (batch_size, num_values)
+            C = tf.expand_dims(C, 1) # (batch_size, 1, num_values)
 
             # Key matrix Q
-            q_ = tf.reshape(keys, [-1, value_vec_size])                 # (batch_size * num_keys, vec_size)
-            Q = tf.matmul(q_, W_q)                                      # (batch_size * num_keys, 1)
-            Q = tf.reshape(Q, [-1, self.num_keys])                      # (batch_size, num_keys)
-            Q = tf.expand_dims(Q, 2)                                    # (batch_size, num_keys, 1)
+            q_ = tf.reshape(keys, [-1, value_vec_size]) # (batch_size * num_keys, vec_size)
+            Q = tf.matmul(q_, W_q) # (batch_size * num_keys, 1)
+            Q = tf.reshape(Q, [-1, self.num_keys]) # (batch_size, num_keys)
+            Q = tf.expand_dims(Q, 2) # (batch_size, num_keys, 1)
 
             # Key-value matrix CQ
-            c_t = tf.transpose(c_, perm = [1, 0])                         # (vec_size, batch_size * num_values)
-            wc_ = tf.multiply(c_t, W_cq)                                # (vec_size, batch_size * num_values)
-            wc_ = tf.reshape(wc_, [-1, value_vec_size, self.num_values])# (batch_size, vec_size, num_values)
-            CQ = tf.matmul(keys, wc_)                                   # (batch_size, num_keys, num_values)
+            c_t = tf.transpose(c_, perm = [1, 0]) # (vec_size, batch_size * num_values)
+            wc_ = tf.multiply(c_t, W_cq) # (vec_size, batch_size * num_values)
+            wc_ = tf.reshape(wc_, [-1, value_vec_size, self.num_values]) # (batch_size, vec_size, num_values)
+            CQ = tf.matmul(keys, wc_) # (batch_size, num_keys, num_values)
 
             # Build similarity matrix S
-            S = C + Q + CQ                                              # (batch_size, num_keys, num_values)
+            S = C + Q + CQ # (batch_size, num_keys, num_values)
 
             ### Key-to-Value: Context-to-Question Attention (C2Q)
             # Apply softmax to get attention distribution over previous hidden states
-            values_attn_logits_mask = tf.expand_dims(values_mask, 1)                        # (batch_size, 1, num_values)
-            _, values_attn_dist = masked_softmax(S, values_attn_logits_mask, 2)             # (batch_size, num_keys, num_values)
+            values_attn_logits_mask = tf.expand_dims(values_mask, 1) # (batch_size, 1, num_values)
+            _, values_attn_dist = masked_softmax(S, values_attn_logits_mask, 2) # (batch_size, num_keys, num_values)
 
             # Use attention distribution to take weighted sum of values
             # and apply dropout/keep_prob
-            keys_to_values = tf.matmul(values_attn_dist, values)                            # (batch_size, num_keys, vec_size)
-            keys_to_values = tf.nn.dropout(keys_to_values, self.keep_prob)                  # (batch_size, num_keys, vec_size)
+            keys_to_values = tf.matmul(values_attn_dist, values) # (batch_size, num_keys, vec_size)
+            keys_to_values = tf.nn.dropout(keys_to_values, self.keep_prob) # (batch_size, num_keys, vec_size)
 
 
             ### Value-to-Key: Question-to-Context Attention (Q2C)
             # Take max of the corresponding row of the similarity matrix
-            m = tf.reduce_max(S, axis = 2, keep_dims = True)                                    # (batch_size, num_keys, 1)
+            m = tf.reduce_max(S, axis = 2, keep_dims = True) # (batch_size, num_keys, 1)
 
             # Apply softmax to get attention distribution over previous hidden states
-            keys_attn_logits_mask = tf.expand_dims(keys_mask, 1)                            # (batch_size, 1, num_keys)
-            _, keys_attn_dist = masked_softmax(m, keys_attn_logits_mask, 2)                 # (batch_size, num_keys, 1)
+            keys_attn_logits_mask = tf.expand_dims(keys_mask, 1) # (batch_size, 1, num_keys)
+            _, keys_attn_dist = masked_softmax(m, keys_attn_logits_mask, 2) # (batch_size, num_keys, 1)
 
             # Use attention distribution to take weighted sum of keys
             # and apply dropout/keep_prob
-            values_to_keys = tf.matmul(keys_attn_dist, keys)                                # (batch_size, num_keys, vec_size)
-            values_to_keys = tf.nn.dropout(values_to_keys, self.keep_prob)                  # (batch_size, num_keys, vec_size)
+            values_to_keys = tf.matmul(keys_attn_dist, keys) # (batch_size, num_keys, vec_size)
+            values_to_keys = tf.nn.dropout(values_to_keys, self.keep_prob) # (batch_size, num_keys, vec_size)
 
             return keys_to_values, values_to_keys
 
@@ -398,8 +398,8 @@ class BiDirectionalAttn2(object):
             (using the attention distribution as weights).
         """
         with vs.variable_scope("BiDirectionalAttn2"):
-            ### In BiDAF, value_vec_size = key_vec_size or this won't work according to Piazza
-            #value_vec_size = self.value_vec_size
+            # In BiDAF, value_vec_size = key_vec_size or this won't work according to Piazza
+            # value_vec_size = self.value_vec_size
 
             W_c = tf.get_variable("W_c", shape = [self.vec_size, 1],
                 initializer = tf.contrib.layers.xavier_initializer()) # Test: different seeds
@@ -409,78 +409,55 @@ class BiDirectionalAttn2(object):
             
             W_cq = tf.get_variable("W_cq", shape=[self.vec_size, 1],
                 initializer=tf.contrib.layers.xavier_initializer()) # Test: different seeds
-            
-
-            #print("vec_size: ", self.vec_size)
-            #print("num_values: ", self.num_values)
-            #print("num_keys: ", self.num_keys)
-            #print("W: ", W_c.get_shape().as_list())
 
             ### Derive Similarity matrix S
             # Value matrix C
-            c_ = tf.reshape(values, [-1, self.vec_size])               # (batch_size * num_values, vec_size)
-            C = tf.matmul(c_, W_c)                                      # (batch_size * num_values, 1)
-            C = tf.reshape(C, [-1, self.num_values])                    # (batch_size, num_values)
-            C = tf.expand_dims(C, 1)                                    # (batch_size, 1, num_values)
-
-            #print("C: ", C.get_shape().as_list())
+            c_ = tf.reshape(values, [-1, self.vec_size]) # (batch_size * num_values, vec_size)
+            C = tf.matmul(c_, W_c) # (batch_size * num_values, 1)
+            C = tf.reshape(C, [-1, self.num_values]) # (batch_size, num_values)
+            C = tf.expand_dims(C, 1) # (batch_size, 1, num_values)
 
             # Key matrix Q
-            q_ = tf.reshape(keys, [-1, self.vec_size])                 # (batch_size * num_keys, vec_size)
-            Q = tf.matmul(q_, W_q)                                      # (batch_size * num_keys, 1)
-            Q = tf.reshape(Q, [-1, self.num_keys])                      # (batch_size, num_keys)
-            Q = tf.expand_dims(Q, 2)                                    # (batch_size, num_keys, 1)
-
-            #print("Q: ", Q.get_shape().as_list())
+            q_ = tf.reshape(keys, [-1, self.vec_size]) # (batch_size * num_keys, vec_size)
+            Q = tf.matmul(q_, W_q) # (batch_size * num_keys, 1)
+            Q = tf.reshape(Q, [-1, self.num_keys]) # (batch_size, num_keys)
+            Q = tf.expand_dims(Q, 2) # (batch_size, num_keys, 1)
 
             # Key-value matrix CQ
-            c_t = tf.transpose(c_, perm = [1, 0])                         # (vec_size, batch_size * num_values)
-            wc_ = tf.multiply(c_t, W_cq)                                # (vec_size, batch_size * num_values)
-            #print("wc_: ", wc_.get_shape().as_list())
-            wc_ = tf.reshape(wc_, [-1, self.vec_size, self.num_values])# (batch_size, vec_size, num_values)
-            #print("wc_: ", wc_.get_shape().as_list())
-            CQ = tf.matmul(keys, wc_)                                   # (batch_size, num_keys, num_values)
-            #print("CQ ", CQ.get_shape().as_list())
+            c_t = tf.transpose(c_, perm = [1, 0]) # (vec_size, batch_size * num_values)
+            wc_ = tf.multiply(c_t, W_cq) # (vec_size, batch_size * num_values)
+            wc_ = tf.reshape(wc_, [-1, self.vec_size, self.num_values]) # (batch_size, vec_size, num_values)
+            CQ = tf.matmul(keys, wc_) # (batch_size, num_keys, num_values)
 
             # Build similarity matrix S
-            S = C + Q + CQ                                              # (batch_size, num_keys, num_values)
-
-            #print("S: ", S.get_shape().as_list())
+            S = C + Q + CQ # (batch_size, num_keys, num_values)
 
             ### Context-to-Question Attention (C2Q)
             # Apply softmax to get attention distribution over previous hidden states
-            values_attn_logits_mask = tf.expand_dims(keys_mask, 2)                        # (batch_size, num_keys, 1)
-            _, values_attn_dist = masked_softmax(S, values_attn_logits_mask, 1)             # (batch_size, num_keys, num_values)
-
-            #print("values_attn_dist: ", values_attn_dist.get_shape().as_list())
+            values_attn_logits_mask = tf.expand_dims(keys_mask, 2) # (batch_size, num_keys, 1)
+            _, values_attn_dist = masked_softmax(S, values_attn_logits_mask, 1) # (batch_size, num_keys, num_values)
 
             # Use attention distribution to take weighted sum of values
             # and apply dropout/keep_prob
+            #keys_to_values = tf.matmul(values_attn_dist, values) # (batch_size, num_keys, vec_size)
+            #keys_to_values = tf.nn.dropout(keys_to_values, self.keep_prob) # (batch_size, num_keys, vec_size)
             values_to_keys = tf.matmul(tf.reshape(values_attn_dist, [-1, self.num_values, self.num_keys]), keys) # (batch_size, num_values, vec_size)
             values_to_keys = tf.nn.dropout(values_to_keys, self.keep_prob) # (batch_size, num_values, vec_size)
-            #keys_to_values = tf.matmul(values_attn_dist, values)                            # (batch_size, num_keys, vec_size)
-            #keys_to_values = tf.nn.dropout(keys_to_values, self.keep_prob)                  # (batch_size, num_keys, vec_size)
 
-            #print("values_to_keys: ", values_to_keys.get_shape().as_list())
 
             ### Question-to-Context Attention (Q2C)
             # Take max of the corresponding row of the similarity matrix
-            m = tf.reduce_max(S, axis = 1, keep_dims = True)                                    # (batch_size, 1 num_values)
-
-            #print("m: ", m.get_shape().as_list())
+            m = tf.reduce_max(S, axis = 1, keep_dims = True) # (batch_size, 1 num_values)
 
             # Apply softmax to get attention distribution over previous hidden states
-            keys_attn_logits_mask = tf.expand_dims(values_mask, 1)                            # (batch_size, 1, num_values)
-            _, keys_attn_dist = masked_softmax(m, keys_attn_logits_mask, 2)                 # (batch_size, 1, num_values)
-
-            #print("keys_attn_dist: ", keys_attn_dist.get_shape().as_list())
+            keys_attn_logits_mask = tf.expand_dims(values_mask, 1) # (batch_size, 1, num_values)
+            _, keys_attn_dist = masked_softmax(m, keys_attn_logits_mask, 2) # (batch_size, 1, num_values)
 
             # Use attention distribution to take weighted sum of keys
             # and apply dropout/keep_prob
-            keys_to_values = tf.matmul(keys_attn_dist, values)                                # (batch_size, 1, vec_size)
-            keys_to_values = tf.nn.dropout(keys_to_values, self.keep_prob)                  # (batch_size, 1, vec_size)
+            keys_to_values = tf.matmul(keys_attn_dist, values) # (batch_size, 1, vec_size)
+            keys_to_values = tf.nn.dropout(keys_to_values, self.keep_prob) # (batch_size, 1, vec_size)
 
-            #print("keys_to_values: ", keys_to_values.get_shape().as_list())
             return values_to_keys, keys_to_values
 
 
@@ -535,38 +512,30 @@ class SelfAttn(object):
                 initializer=tf.contrib.layers.xavier_initializer())
 
             values_t = tf.transpose(values,[0, 2, 1]) # (batch_size, value_vec_size, num_keys)
-            # print("values_t: ", values_t.get_shape().as_list())
 
             h1 = tf.einsum('kj,ikl->ijl', W_1, values_t) # (batch_size, weight_dim, num_keys)
-            # print("h1: ", h1.get_shape().as_list())
             h1 = tf.expand_dims(h1, 2) # (batch_size, weight_dim, 1, num_keys)
-            # print("h1 (post expand_dims(h1, 2): ", h1.get_shape().as_list())
 
             h2 = tf.einsum('kj,ikl->ijl', W_2, values_t) # (batch_size, weight_dim, num_keys)
-            # print("h2: ", h2.get_shape().as_list())
             h2 = tf.expand_dims(h2, 3) # (batch_size, weight_dim, num_keys, 1)
-            # print("h2 (post expand_dims(h2, 3): ", h2.get_shape().as_list())
 
             # Get the attention scores (logits) e
             z = tf.tanh(tf.reshape( # (batch_size, weight_dim, num_keys * num_keys)
                 tf.add(h1, h2),                      
                 [-1, self.weight_dim, self.num_keys * self.num_keys]))
-            # print("z: ", z.get_shape().as_list())
             e = tf.reshape( # (batch_size, num_keys, num_keys)
                 tf.einsum('k,ikj->ij', V, z),
                 [-1, self.num_keys, self.num_keys])
-            # print("e: ", e.get_shape().as_list())
 
             # Apply softmax to get attention distribution over previous hidden states
-            attn_logits_mask = tf.expand_dims(keys_mask, 1)             # (batch_size, 1, num_keys)
-            _, attn_dist = masked_softmax(e, attn_logits_mask, 2)       # (batch_size, num_keys, num_keys). take softmax over keys
+            attn_logits_mask = tf.expand_dims(keys_mask, 1) # (batch_size, 1, num_keys)
+            _, attn_dist = masked_softmax(e, attn_logits_mask, 2) # (batch_size, num_keys, num_keys). take softmax over keys
 
             # Use attention distribution to take weighted sum of values
-            output = tf.matmul(attn_dist, values)                       # (batch_size, num_keys, value_vec_size)
+            output = tf.matmul(attn_dist, values) # (batch_size, num_keys, value_vec_size)
 
             # Apply dropout
-            output = tf.nn.dropout(output, self.keep_prob)              # (batch_size, num_keys, value_vec_size)
-            # print("output: ", output.get_shape().as_list())
+            output = tf.nn.dropout(output, self.keep_prob)  # (batch_size, num_keys, value_vec_size)
 
             return attn_dist, output
 
@@ -606,17 +575,7 @@ class FullySum(object):
                 shape=[1, self.hidden_size],
                 initializer=tf.contrib.layers.xavier_initializer())
 
-            #print("W_1: ", W_1.get_shape().as_list())
-            #print(tf.expand_dims(W_1,0).get_shape().as_list())
-            #print("W_2: ", W_2.get_shape().as_list())
-            #print("B: ", B.get_shape().as_list())
-            #print("values1: ", values1.get_shape().as_list())
-            #print("values2: ", values2.get_shape().as_list())
-           # temp = tf.einsum('bnj,jh->bnh', values1, W_1)
-            #print(temp.get_shape().as_list())
-
             mul = tf.einsum('bnj,jh->bnh', values1, W_1) + tf.einsum('bnj,jh->bnh', values2, W_2)
-            #print(tf.add(mul, B).get_shape().as_list())
 
             return tf.tanh(mul + B) #(batch_size, num_keys, hidden size)
 
@@ -733,6 +692,8 @@ class BiRNN2(object):
     Feeds input through a RNN and returns all the hidden states.
 
     This code uses a bidirectional LSTM.
+
+    See BiRNN for virtually identical class; different classes are used for variable spaces.
     """
     def __init__(self, hidden_size, keep_prob):
         """
@@ -794,6 +755,8 @@ class BiRNN3(object):
 
     This code uses a bidirectional LSTM, though we are considering
     using GRUCells for better performance.
+
+    See BiRNN for virtually identical class; different classes are used for variable spaces.
     """
     def __init__(self, hidden_size, keep_prob):
         """
@@ -854,6 +817,8 @@ class BiRNN4(object):
 
     This code uses a bidirectional LSTM, though we are considering
     using GRUCells for better performance.
+
+    See BiRNN for virtually identical class; different classes are used for variable spaces.
     """
     def __init__(self, hidden_size, keep_prob):
         """

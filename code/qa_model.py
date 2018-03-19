@@ -547,6 +547,7 @@ class QAModel(object):
                 blended_reps,
                 num_outputs=self.FLAGS.hidden_size) # blended_reps_final is shape (batch_size, context_len, hidden_size)
 
+
         elif self.FLAGS.attention == "BiDAFSelfAttn_k": # this one sucks
             # Use a RNN to get hidden states for the context and the question
             # Note: here the RNNEncoder is shared (i.e. the weights are the same)
@@ -598,6 +599,7 @@ class QAModel(object):
                 self_blended_reps_2,
                 num_outputs=self.FLAGS.hidden_size) # blended_reps_final has shape (batch_size, context_len, hidden_size)
         
+
         elif self.FLAGS.attention == "bidaf_rnet_parallel":
             # Section numbers from R-Net paper
 
@@ -681,6 +683,7 @@ class QAModel(object):
             f_sum = FullySum(self.FLAGS.hidden_size*2, self.FLAGS.hidden_size, self.FLAGS.hidden_size)
             blended_reps_final = f_sum.build_graph(blended_reps, h_a)
 
+
         elif self.FLAGS.attention == "bidaf_rnet_piped":
             # Section numbers from R-Net paper
 
@@ -757,6 +760,7 @@ class QAModel(object):
             f_sum = FullySum(self.FLAGS.hidden_size*2, self.FLAGS.hidden_size, self.FLAGS.hidden_size)
             blended_reps_final = f_sum.build_graph(blended_reps, h_a)
 
+
         elif self.FLAGS.attention == "BiDAFRnet_k":
             # Section numbers from R-Net paper
             
@@ -803,6 +807,7 @@ class QAModel(object):
             # blended_reps_final is shape (batch_size, context_len, hidden_size)
             f_sum = FullySum(self.FLAGS.hidden_size*2, self.FLAGS.hidden_size, self.FLAGS.hidden_size)
             blended_reps_final = f_sum.build_graph(self_blended_reps_2, h_a)
+
 
         else:
             # Default baseline: self.FLAGS.attention == "BasicAttn"
