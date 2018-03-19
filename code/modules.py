@@ -95,6 +95,9 @@ class RNNEncoder2(object):
     This code originally used a bidirectional GRU, but 
     we find that LSTMs give marginally better results long-term while being 
     more computationally expensive.
+
+    Note that this code is virtually identical to RNNEncoder; we use a second 
+    here for variable scope differences.
     """
 
     def __init__(self, hidden_size, keep_prob):
@@ -259,7 +262,7 @@ class BiDirectionalAttn(object):
           value_vec_size: size of the value vectors. int
         """
         self.keep_prob = keep_prob
-        ### In BiDAF, value_vec_size = key_vec_size or this won't work according to Piazza
+        # In BiDAF, value_vec_size = key_vec_size or this won't work according to Piazza
         tf.assert_equal(key_vec_size, value_vec_size)
         self.key_vec_size = key_vec_size
         self.value_vec_size = value_vec_size
@@ -286,7 +289,7 @@ class BiDirectionalAttn(object):
             (using the attention distribution as weights).
         """
         with vs.variable_scope("BiDirectionalAttn"):
-            ### In BiDAF, value_vec_size = key_vec_size or this won't work according to Piazza
+            # In BiDAF, value_vec_size = key_vec_size or this won't work according to Piazza
             value_vec_size = self.value_vec_size
 
             W_c = tf.get_variable("W_c", shape = [value_vec_size, 1],
